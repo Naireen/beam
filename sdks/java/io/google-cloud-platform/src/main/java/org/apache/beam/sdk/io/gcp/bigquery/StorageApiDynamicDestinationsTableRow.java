@@ -123,6 +123,7 @@ public class StorageApiDynamicDestinationsTableRow<T, DestinationT>
       public void refreshSchemaInternal() throws Exception {
         TableReference tableReference = getTable(destination).getTableReference();
         LOG.info("Refreshing schema for table " + BigQueryHelpers.toTableSpec(tableReference));
+        LOG.info("Is this log seen?");
         SCHEMA_CACHE.refreshSchema(tableReference, datasetService);
         TableSchema newSchema = SCHEMA_CACHE.getSchema(tableReference, datasetService);
         if (newSchema == null) {

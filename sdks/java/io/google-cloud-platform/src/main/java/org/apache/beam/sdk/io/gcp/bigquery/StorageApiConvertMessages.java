@@ -27,6 +27,8 @@ import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A transform that converts messages to protocol buffers in preparation for writing to BigQuery.
@@ -37,6 +39,7 @@ public class StorageApiConvertMessages<DestinationT, ElementT>
         PCollection<KV<DestinationT, StorageApiWritePayload>>> {
   private final StorageApiDynamicDestinations<ElementT, DestinationT> dynamicDestinations;
   private final BigQueryServices bqServices;
+  private static final Logger LOG = LoggerFactory.getLogger(StorageApiConvertMessages.class);
 
   public StorageApiConvertMessages(
       StorageApiDynamicDestinations<ElementT, DestinationT> dynamicDestinations,
@@ -99,12 +102,16 @@ public class StorageApiConvertMessages<DestinationT, ElementT>
         @Element KV<DestinationT, ElementT> element,
         OutputReceiver<KV<DestinationT, StorageApiWritePayload>> o)
         throws Exception {
-      dynamicDestinations.setSideInputAccessorFromProcessContext(c);
-      MessageConverter<ElementT> messageConverter =
-          messageConverters.get(
-              element.getKey(), dynamicDestinations, getDatasetService(pipelineOptions));
-      StorageApiWritePayload payload = messageConverter.toMessage(element.getValue());
-      o.output(KV.of(element.getKey(), payload));
+      try {
+        LOG.info("Add logging to verify this works");
+        dynamicDestinations.setSideInputAccessorFromProcessContext(c);
+        MessageConverter<ElementT> messageConverter =
+            messageConverters.get(
+                element.getKey(), dynamicDestinations, getDatasetService(pipelineOptions));
+        o.output(KV.of(element.getKey(), messageConverter.toMessage(element.getValue())));
+      } catch (Exception e) {
+        LOG.error("put in a try catch statement", e);
+      }
     }
   }
 }

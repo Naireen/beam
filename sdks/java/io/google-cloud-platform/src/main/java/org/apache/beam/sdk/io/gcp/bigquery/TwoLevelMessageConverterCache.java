@@ -23,6 +23,8 @@ import org.apache.beam.sdk.io.gcp.bigquery.StorageApiDynamicDestinations.Message
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.cache.Cache;
 import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.cache.CacheBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A cache for {@link MessageConverter} objects.
@@ -33,9 +35,11 @@ import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.cache.CacheBuild
  */
 class TwoLevelMessageConverterCache<DestinationT, ElementT> implements Serializable {
   final String operationName;
+  private static final Logger LOG = LoggerFactory.getLogger(TwoLevelMessageConverterCache.class);
 
   TwoLevelMessageConverterCache(String operationName) {
     this.operationName = operationName;
+    LOG.info("Instantiate TwoLevelMessageConverterCache");
   }
 
   // Cache MessageConverters since creating them can be expensive. Cache is keyed by transform name

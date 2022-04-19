@@ -38,6 +38,8 @@ import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.TypeDescriptor;
 import org.joda.time.Duration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** This {@link PTransform} manages loads into BigQuery using the Storage API. */
 public class StorageApiLoads<DestinationT, ElementT>
@@ -52,6 +54,7 @@ public class StorageApiLoads<DestinationT, ElementT>
   private final BigQueryServices bqServices;
   private final int numShards;
   private final boolean allowInconsistentWrites;
+  private static final Logger LOG = LoggerFactory.getLogger(StorageApiLoads.class);
 
   public StorageApiLoads(
       Coder<DestinationT> destinationCoder,
@@ -74,6 +77,7 @@ public class StorageApiLoads<DestinationT, ElementT>
 
   @Override
   public WriteResult expand(PCollection<KV<DestinationT, ElementT>> input) {
+    LOG.info("expand storage api coder");
     Coder<StorageApiWritePayload> payloadCoder;
     try {
       payloadCoder =
@@ -112,6 +116,7 @@ public class StorageApiLoads<DestinationT, ElementT>
 
   public WriteResult expandTriggered(
       PCollection<KV<DestinationT, ElementT>> input, Coder<StorageApiWritePayload> payloadCoder) {
+    LOG.info("expand triggered write");
     // Handle triggered, low-latency loads into BigQuery.
     PCollection<KV<DestinationT, ElementT>> inputInGlobalWindow =
         input.apply("rewindowIntoGlobal", Window.into(new GlobalWindows()));
