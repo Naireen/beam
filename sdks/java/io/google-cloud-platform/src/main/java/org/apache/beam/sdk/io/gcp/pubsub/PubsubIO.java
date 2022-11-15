@@ -1019,13 +1019,11 @@ public class PubsubIO {
             "Can't set both the topic and the subscription for " + "a PubsubIO.Read transform");
       }
 
-      @Nullable
-      ValueProvider<TopicPath> topicPath =
+      @Nullable ValueProvider<TopicPath> topicPath =
           getTopicProvider() == null
               ? null
               : NestedValueProvider.of(getTopicProvider(), new TopicPathTranslator());
-      @Nullable
-      ValueProvider<SubscriptionPath> subscriptionPath =
+      @Nullable ValueProvider<SubscriptionPath> subscriptionPath =
           getSubscriptionProvider() == null
               ? null
               : NestedValueProvider.of(getSubscriptionProvider(), new SubscriptionPathTranslator());
@@ -1128,6 +1126,8 @@ public class PubsubIO {
 
     abstract @Nullable ValueProvider<PubsubTopic> getTopicProvider();
 
+    abstract SerializableFunction<T, PubsubTopic> getTopicFunctionProvider();
+
     abstract PubsubClient.PubsubClientFactory getPubsubClientFactory();
 
     /** the batch size for bulk submissions to pubsub. */
@@ -1163,6 +1163,9 @@ public class PubsubIO {
     @AutoValue.Builder
     abstract static class Builder<T> {
       abstract Builder<T> setTopicProvider(ValueProvider<PubsubTopic> topicProvider);
+
+      abstract Builder<T> setTopicFunctionProvider(
+          SerializableFunction<T, PubsubTopic> topicProvider);
 
       abstract Builder<T> setPubsubClientFactory(PubsubClient.PubsubClientFactory factory);
 
@@ -1261,47 +1264,64 @@ public class PubsubIO {
       return toBuilder().setPubsubRootUrl(pubsubRootUrl).build();
     }
 
+    public Write<T> withTopicFunctionProvider(SerializableFunction<T, PubsubTopic> topicProvider) {
+      return toBuilder().setTopicFunctionProvider(topicProvider).build();
+    }
+
     @Override
     public PDone expand(PCollection<T> input) {
-      if (getTopicProvider() == null) {
-        throw new IllegalStateException("need to set the topic of a PubsubIO.Write transform");
+      if (getTopicProvider() == null && getTopicFunctionProvider() == null) {
+        throw new IllegalStateException(
+            "need to set the topic of a PubsubIO.Write transform, or the getTopicFunctionProvider"
+                + " function.");
       }
-
-      switch (input.isBounded()) {
-        case BOUNDED:
-          input.apply(
-              ParDo.of(
-                  new PubsubBoundedWriter(
-                      MoreObjects.firstNonNull(getMaxBatchSize(), MAX_PUBLISH_BATCH_SIZE),
-                      MoreObjects.firstNonNull(
-                          getMaxBatchBytesSize(), MAX_PUBLISH_BATCH_BYTE_SIZE_DEFAULT))));
-          return PDone.in(input.getPipeline());
-        case UNBOUNDED:
-          return input
-              .apply(
-                  MapElements.into(new TypeDescriptor<PubsubMessage>() {})
-                      .via(
-                          elem -> {
-                            PubsubMessage message = getFormatFn().apply(elem);
-                            try {
-                              validateAndGetPubsubMessageSize(message);
-                            } catch (SizeLimitExceededException e) {
-                              throw new IllegalArgumentException(e);
-                            }
-                            return message;
-                          }))
-              .apply(
-                  new PubsubUnboundedSink(
-                      getPubsubClientFactory(),
-                      NestedValueProvider.of(getTopicProvider(), new TopicPathTranslator()),
-                      getTimestampAttribute(),
-                      getIdAttribute(),
-                      100 /* numShards */,
-                      MoreObjects.firstNonNull(
-                          getMaxBatchSize(), PubsubUnboundedSink.DEFAULT_PUBLISH_BATCH_SIZE),
-                      MoreObjects.firstNonNull(
-                          getMaxBatchBytesSize(), PubsubUnboundedSink.DEFAULT_PUBLISH_BATCH_BYTES),
-                      getPubsubRootUrl()));
+      if (getTopicProvider() != null) {
+        switch (input.isBounded()) {
+          case BOUNDED:
+            input.apply(
+                ParDo.of(
+                    new PubsubBoundedWriter(
+                        MoreObjects.firstNonNull(getMaxBatchSize(), MAX_PUBLISH_BATCH_SIZE),
+                        MoreObjects.firstNonNull(
+                            getMaxBatchBytesSize(), MAX_PUBLISH_BATCH_BYTE_SIZE_DEFAULT))));
+            return PDone.in(input.getPipeline());
+          case UNBOUNDED:
+            return input
+                .apply(
+                    MapElements.into(new TypeDescriptor<PubsubMessage>() {})
+                        .via(
+                            elem -> {
+                              PubsubMessage message = getFormatFn().apply(elem);
+                              try {
+                                validateAndGetPubsubMessageSize(message);
+                              } catch (SizeLimitExceededException e) {
+                                throw new IllegalArgumentException(e);
+                              }
+                              return message;
+                            }))
+                .apply(
+                    new PubsubUnboundedSink(
+                        getPubsubClientFactory(),
+                        NestedValueProvider.of(getTopicProvider(), new TopicPathTranslator()),
+                        getTimestampAttribute(),
+                        getIdAttribute(),
+                        100 /* numShards */,
+                        MoreObjects.firstNonNull(
+                            getMaxBatchSize(), PubsubUnboundedSink.DEFAULT_PUBLISH_BATCH_SIZE),
+                        MoreObjects.firstNonNull(
+                            getMaxBatchBytesSize(),
+                            PubsubUnboundedSink.DEFAULT_PUBLISH_BATCH_BYTES),
+                        getPubsubRootUrl(),
+                        getTopicFunctionProvider() == null));
+        }
+      }
+      if (getTopicFunctionProvider() != null) {
+        /**
+         * Modify the pubsub messages to update the topic based on the provided topic generator
+         * function
+         */
+        PCollection<PubsubMessage> pubsubMessages =
+            input.apply(new PreparePubsubWrite<>(getTopicFunctionProvider(), getFormatFn()));
       }
       throw new RuntimeException(); // cases are exhaustive.
     }

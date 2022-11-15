@@ -129,6 +129,9 @@ public class PubSubPayloadTranslation {
       if (transform.getTransform().outer.getIdAttribute() != null) {
         payloadBuilder.setIdAttribute(transform.getTransform().outer.getIdAttribute());
       }
+      if (transform.getTransform().outer.getEnableDynamicDestinations() != null) {
+        payloadBuilder.setEnableDynamicDestinations(transform.getTransform().outer.setEnableDynamicDestinations());
+      }
       return FunctionSpec.newBuilder()
           .setUrn(getUrn(transform.getTransform()))
           .setPayload(payloadBuilder.build().toByteString())

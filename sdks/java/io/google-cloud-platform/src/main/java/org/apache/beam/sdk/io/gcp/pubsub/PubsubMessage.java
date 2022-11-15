@@ -42,24 +42,28 @@ public class PubsubMessage {
 
     abstract @Nullable String getOrderingKey();
 
+    abstract @Nullable String getTopicPath();
+
     static Impl create(
         byte[] payload,
         @Nullable Map<String, String> attributes,
         @Nullable String messageId,
-        @Nullable String orderingKey) {
-      return new AutoValue_PubsubMessage_Impl(payload, attributes, messageId, orderingKey);
+        @Nullable String orderingKey,
+        @Nullable String topicPath) {
+      return new AutoValue_PubsubMessage_Impl(
+          payload, attributes, messageId, orderingKey, topicPath);
     }
   }
 
   private Impl impl;
 
   public PubsubMessage(byte[] payload, @Nullable Map<String, String> attributes) {
-    this(payload, attributes, null, null);
+    this(payload, attributes, null, null, null);
   }
 
   public PubsubMessage(
       byte[] payload, @Nullable Map<String, String> attributes, @Nullable String messageId) {
-    impl = Impl.create(payload, attributes, messageId, null);
+    impl = Impl.create(payload, attributes, messageId, null, null);
   }
 
   public PubsubMessage(
@@ -67,7 +71,15 @@ public class PubsubMessage {
       @Nullable Map<String, String> attributes,
       @Nullable String messageId,
       @Nullable String orderingKey) {
-    impl = Impl.create(payload, attributes, messageId, orderingKey);
+    impl = Impl.create(payload, attributes, messageId, orderingKey, null);
+  }
+
+   public PubsubMessage(
+      byte[] payload,
+      @Nullable Map<String, String> attributes,
+      @Nullable String messageId,
+      @Nullable String orderingKey, @Nullable String topicPath) {
+    impl = Impl.create(payload, attributes, messageId, orderingKey, topicPath);
   }
 
   /** Returns the main PubSub message. */
@@ -94,6 +106,11 @@ public class PubsubMessage {
   /** Returns the ordering key of the message. */
   public @Nullable String getOrderingKey() {
     return impl.getOrderingKey();
+  }
+
+  /** Returns the full topic path of the message. */
+  public @Nullable String getTopicPath() {
+    return impl.getTopicPath();
   }
 
   @Override

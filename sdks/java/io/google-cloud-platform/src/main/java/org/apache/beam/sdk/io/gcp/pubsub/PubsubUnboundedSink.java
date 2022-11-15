@@ -34,7 +34,6 @@ import org.apache.beam.sdk.coders.CoderException;
 import org.apache.beam.sdk.coders.KvCoder;
 import org.apache.beam.sdk.coders.NullableCoder;
 import org.apache.beam.sdk.coders.StringUtf8Coder;
-import org.apache.beam.sdk.coders.VarIntCoder;
 import org.apache.beam.sdk.extensions.protobuf.ProtoCoder;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubClient.OutgoingMessage;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubClient.PubsubClientFactory;
@@ -94,6 +93,9 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
   /** Default longest delay between receiving a message and pushing it to Pubsub. */
   private static final Duration DEFAULT_MAX_LATENCY = Duration.standardSeconds(2);
 
+  /** Enables dynamic topic destinations */
+  private static boolean enableDynamicDestinations = false;
+
   /** Coder for conveying outgoing messages between internal stages. */
   private static class OutgoingMessageCoder extends AtomicCoder<OutgoingMessage> {
     private static final NullableCoder<String> RECORD_ID_CODER =
@@ -139,7 +141,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
   // ================================================================================
 
   /** Convert elements to messages and shard them. */
-  private static class ShardFn extends DoFn<byte[], KV<Integer, OutgoingMessage>> {
+  private static class ShardFn extends DoFn<KV<String, byte[]>, KV<String, OutgoingMessage>> {
     private final Counter elementCounter = Metrics.counter(ShardFn.class, "elements");
     private final int numShards;
     private final RecordIdMethod recordIdMethod;
@@ -152,10 +154,11 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
     @ProcessElement
     public void processElement(ProcessContext c) throws Exception {
       elementCounter.inc();
+      KV<String, byte[]> element = c.element();
       com.google.pubsub.v1.PubsubMessage message =
-          com.google.pubsub.v1.PubsubMessage.parseFrom(c.element());
+          com.google.pubsub.v1.PubsubMessage.parseFrom(element.getValue());
       byte[] elementBytes = message.getData().toByteArray();
-
+      String pubsubTopic = element.getKey();
       long timestampMsSinceEpoch = c.timestamp().getMillis();
       @Nullable String recordId = null;
       switch (recordIdMethod) {
@@ -174,7 +177,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
       }
       c.output(
           KV.of(
-              ThreadLocalRandom.current().nextInt(numShards),
+              pubsubTopic + "-" + ThreadLocalRandom.current().nextInt(numShards),
               OutgoingMessage.of(message, timestampMsSinceEpoch, recordId)));
     }
 
@@ -190,7 +193,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
   // ================================================================================
 
   /** Publish messages to Pubsub in batches. */
-  private static class WriterFn extends DoFn<KV<Integer, Iterable<OutgoingMessage>>, Void> {
+  private static class WriterFn extends DoFn<KV<String, Iterable<OutgoingMessage>>, Void> {
     private final PubsubClientFactory pubsubFactory;
     private final ValueProvider<TopicPath> topic;
     private final String timestampAttribute;
@@ -241,8 +244,9 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
     }
 
     /** BLOCKING Send {@code messages} as a batch to Pubsub. */
-    private void publishBatch(List<OutgoingMessage> messages, int bytes) throws IOException {
-      int n = pubsubClient.publish(topic.get(), messages);
+    private void publishBatch(List<OutgoingMessage> messages, TopicPath topicPath, int bytes)
+        throws IOException {
+      int n = pubsubClient.publish(topicPath, messages);
       checkState(
           n == messages.size(),
           "Attempted to publish %s messages but %s were successful",
@@ -251,6 +255,10 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
       batchCounter.inc();
       elementCounter.inc(messages.size());
       byteCounter.inc(bytes);
+    }
+
+    private TopicPath extractTopic(String topicPath) {
+      return new TopicPath(topicPath.substring(0, topicPath.lastIndexOf("-")));
     }
 
     @StartBundle
@@ -268,15 +276,18 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
     public void processElement(ProcessContext c) throws Exception {
       List<OutgoingMessage> pubsubMessages = new ArrayList<>(publishBatchSize);
       int bytes = 0;
-      for (OutgoingMessage message : c.element().getValue()) {
+      KV<String, Iterable<OutgoingMessage>> elements = c.element();
+      TopicPath topicPath = extractTopic(elements.getKey());
+      for (OutgoingMessage message : elements.getValue()) {
         if (!pubsubMessages.isEmpty()
-            && bytes + message.message().getData().size() > publishBatchBytes) {
+            && (bytes + message.message().getData().size() > publishBatchBytes
+                || pubsubMessages.size() >= publishBatchSize)) {
           // Break large (in bytes) batches into smaller.
           // (We've already broken by batch size using the trigger below, though that may
           // run slightly over the actual PUBLISH_BATCH_SIZE. We'll consider that ok since
           // the hard limit from Pubsub is by bytes rather than number of messages.)
           // BLOCKS until published.
-          publishBatch(pubsubMessages, bytes);
+          publishBatch(pubsubMessages, topicPath, bytes);
           pubsubMessages.clear();
           bytes = 0;
         }
@@ -285,7 +296,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
       }
       if (!pubsubMessages.isEmpty()) {
         // BLOCKS until published.
-        publishBatch(pubsubMessages, bytes);
+        publishBatch(pubsubMessages, topicPath, bytes);
       }
     }
 
@@ -363,7 +374,8 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
       int publishBatchBytes,
       Duration maxLatency,
       RecordIdMethod recordIdMethod,
-      String pubsubRootUrl) {
+      String pubsubRootUrl,
+      boolean enableDynamicDestinations) {
     this.pubsubFactory = pubsubFactory;
     this.topic = topic;
     this.timestampAttribute = timestampAttribute;
@@ -374,6 +386,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
     this.maxLatency = maxLatency;
     this.pubsubRootUrl = pubsubRootUrl;
     this.recordIdMethod = idAttribute == null ? RecordIdMethod.NONE : recordIdMethod;
+    this.enableDynamicDestinations = enableDynamicDestinations;
   }
 
   public PubsubUnboundedSink(
@@ -392,7 +405,8 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
         DEFAULT_PUBLISH_BATCH_BYTES,
         DEFAULT_MAX_LATENCY,
         RecordIdMethod.RANDOM,
-        null);
+        null,
+        false);
   }
 
   public PubsubUnboundedSink(
@@ -412,7 +426,8 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
         DEFAULT_PUBLISH_BATCH_BYTES,
         DEFAULT_MAX_LATENCY,
         RecordIdMethod.RANDOM,
-        pubsubRootUrl);
+        pubsubRootUrl,
+        false);
   }
 
   public PubsubUnboundedSink(
@@ -433,7 +448,8 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
         publishBatchBytes,
         DEFAULT_MAX_LATENCY,
         RecordIdMethod.RANDOM,
-        null);
+        null,
+        false);
   }
 
   public PubsubUnboundedSink(
@@ -455,8 +471,34 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
         publishBatchBytes,
         DEFAULT_MAX_LATENCY,
         RecordIdMethod.RANDOM,
-        pubsubRootUrl);
+        pubsubRootUrl,
+        false);
   }
+
+  public PubsubUnboundedSink(
+      PubsubClientFactory pubsubFactory,
+      ValueProvider<TopicPath> topic,
+      String timestampAttribute,
+      String idAttribute,
+      int numShards,
+      int publishBatchSize,
+      int publishBatchBytes,
+      String pubsubRootUrl,
+      boolean enableDynamicDestinations) {
+    this(
+        pubsubFactory,
+        topic,
+        timestampAttribute,
+        idAttribute,
+        numShards,
+        publishBatchSize,
+        publishBatchBytes,
+        DEFAULT_MAX_LATENCY,
+        RecordIdMethod.RANDOM,
+        pubsubRootUrl,
+        enableDynamicDestinations);
+  }
+
   /** Get the topic being written to. */
   public TopicPath getTopic() {
     return topic.get();
@@ -477,18 +519,23 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
     return idAttribute;
   }
 
+  /** Get if dynamicdestinoations is enabled attribute. */
+  public @Nullable String getEnableDynamicDestinations() {
+    return enableDynamicDestinations;
+  }
+
   @Override
   public PDone expand(PCollection<PubsubMessage> input) {
     return input
         .apply(
             "Output Serialized PubsubMessage Proto",
-            MapElements.into(new TypeDescriptor<byte[]>() {})
-                .via(new PubsubMessages.ParsePayloadAsPubsubMessageProto()))
-        .setCoder(ByteArrayCoder.of())
+            MapElements.into(new TypeDescriptor<KV<String, byte[]>>() {})
+                .via(new PubsubMessages.ParsePayloadAsPubsubMessageProtoWithTopic()))
+        .setCoder(KvCoder.of(StringUtf8Coder.of(), ByteArrayCoder.of()))
         .apply(new PubsubSink(this));
   }
 
-  static class PubsubSink extends PTransform<PCollection<byte[]>, PDone> {
+  static class PubsubSink extends PTransform<PCollection<KV<String, byte[]>>, PDone> {
     public final PubsubUnboundedSink outer;
 
     PubsubSink(PubsubUnboundedSink outer) {
@@ -496,11 +543,11 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
     }
 
     @Override
-    public PDone expand(PCollection<byte[]> input) {
+    public PDone expand(PCollection<KV<String, byte[]>> input) {
       input
           .apply(
               "PubsubUnboundedSink.Window",
-              Window.<byte[]>into(new GlobalWindows())
+              Window.<KV<String, byte[]>>into(new GlobalWindows())
                   .triggering(
                       Repeatedly.forever(
                           AfterFirst.of(
@@ -511,7 +558,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
           .apply(
               "PubsubUnboundedSink.Shard",
               ParDo.of(new ShardFn(outer.numShards, outer.recordIdMethod)))
-          .setCoder(KvCoder.of(VarIntCoder.of(), CODER))
+          .setCoder(KvCoder.of(StringUtf8Coder.of(), CODER))
           .apply(GroupByKey.create())
           .apply(
               "PubsubUnboundedSink.Writer",
