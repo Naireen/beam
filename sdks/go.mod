@@ -23,7 +23,7 @@ module github.com/apache/beam/sdks/v2
 go 1.18
 
 require (
-	cloud.google.com/go/bigquery v1.43.0
+	cloud.google.com/go/bigquery v1.44.0
 	cloud.google.com/go/datastore v1.9.0
 	cloud.google.com/go/profiler v0.3.0
 	cloud.google.com/go/pubsub v1.26.0
@@ -54,21 +54,24 @@ require (
 	golang.org/x/sys v0.2.0
 	golang.org/x/text v0.4.0
 	google.golang.org/api v0.103.0
-	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c
+	google.golang.org/genproto v0.0.0-20221117204609-8f9c96812029
 	google.golang.org/grpc v1.50.1
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/retry.v1 v1.0.3
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-require cloud.google.com/go/bigtable v1.18.0
+require (
+	cloud.google.com/go/bigtable v1.18.0
+	github.com/tetratelabs/wazero v1.0.0-pre.3
+)
 
 require (
 	cloud.google.com/go v0.105.0 // indirect
 	cloud.google.com/go/compute v1.12.1 // indirect
 	cloud.google.com/go/compute/metadata v0.2.1 // indirect
 	cloud.google.com/go/iam v0.7.0 // indirect
-	cloud.google.com/go/longrunning v0.1.1 // indirect
+	cloud.google.com/go/longrunning v0.3.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/Microsoft/hcsshim v0.9.4 // indirect
@@ -123,7 +126,6 @@ require (
 	github.com/shabbyrobe/gocovmerge v0.0.0-20180507124511-f6ea450bfb63 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/tetratelabs/wazero v1.0.0-pre.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
