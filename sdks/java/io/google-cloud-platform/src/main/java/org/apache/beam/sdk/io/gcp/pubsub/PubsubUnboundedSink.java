@@ -94,7 +94,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
   private static final Duration DEFAULT_MAX_LATENCY = Duration.standardSeconds(2);
 
   /** Enables dynamic topic destinations */
-  private static boolean enableDynamicDestinations = false;
+  // private static boolean enableDynamicDestinations = false;
 
   /** Coder for conveying outgoing messages between internal stages. */
   private static class OutgoingMessageCoder extends AtomicCoder<OutgoingMessage> {
@@ -374,8 +374,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
       int publishBatchBytes,
       Duration maxLatency,
       RecordIdMethod recordIdMethod,
-      String pubsubRootUrl,
-      boolean enableDynamicDestinations) {
+      String pubsubRootUrl) {
     this.pubsubFactory = pubsubFactory;
     this.topic = topic;
     this.timestampAttribute = timestampAttribute;
@@ -386,7 +385,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
     this.maxLatency = maxLatency;
     this.pubsubRootUrl = pubsubRootUrl;
     this.recordIdMethod = idAttribute == null ? RecordIdMethod.NONE : recordIdMethod;
-    this.enableDynamicDestinations = enableDynamicDestinations;
+    // this.enableDynamicDestinations = enableDynamicDestinations;
   }
 
   public PubsubUnboundedSink(
@@ -405,8 +404,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
         DEFAULT_PUBLISH_BATCH_BYTES,
         DEFAULT_MAX_LATENCY,
         RecordIdMethod.RANDOM,
-        null,
-        false);
+        null);
   }
 
   public PubsubUnboundedSink(
@@ -426,8 +424,8 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
         DEFAULT_PUBLISH_BATCH_BYTES,
         DEFAULT_MAX_LATENCY,
         RecordIdMethod.RANDOM,
-        pubsubRootUrl,
-        false);
+        pubsubRootUrl
+        );
   }
 
   public PubsubUnboundedSink(
@@ -448,8 +446,7 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
         publishBatchBytes,
         DEFAULT_MAX_LATENCY,
         RecordIdMethod.RANDOM,
-        null,
-        false);
+        null);
   }
 
   public PubsubUnboundedSink(
@@ -471,33 +468,30 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
         publishBatchBytes,
         DEFAULT_MAX_LATENCY,
         RecordIdMethod.RANDOM,
-        pubsubRootUrl,
-        false);
+        pubsubRootUrl);
   }
 
-  public PubsubUnboundedSink(
-      PubsubClientFactory pubsubFactory,
-      ValueProvider<TopicPath> topic,
-      String timestampAttribute,
-      String idAttribute,
-      int numShards,
-      int publishBatchSize,
-      int publishBatchBytes,
-      String pubsubRootUrl,
-      boolean enableDynamicDestinations) {
-    this(
-        pubsubFactory,
-        topic,
-        timestampAttribute,
-        idAttribute,
-        numShards,
-        publishBatchSize,
-        publishBatchBytes,
-        DEFAULT_MAX_LATENCY,
-        RecordIdMethod.RANDOM,
-        pubsubRootUrl,
-        enableDynamicDestinations);
-  }
+  // public PubsubUnboundedSink(
+  //     PubsubClientFactory pubsubFactory,
+  //     ValueProvider<TopicPath> topic,
+  //     String timestampAttribute,
+  //     String idAttribute,
+  //     int numShards,
+  //     int publishBatchSize,
+  //     int publishBatchBytes,
+  //     String pubsubRootUrl) {
+  //   this(
+  //       pubsubFactory,
+  //       topic,
+  //       timestampAttribute,
+  //       idAttribute,
+  //       numShards,
+  //       publishBatchSize,
+  //       publishBatchBytes,
+  //       DEFAULT_MAX_LATENCY,
+  //       RecordIdMethod.RANDOM,
+  //       pubsubRootUrl);
+  // }
 
   /** Get the topic being written to. */
   public TopicPath getTopic() {
@@ -519,10 +513,10 @@ public class PubsubUnboundedSink extends PTransform<PCollection<PubsubMessage>, 
     return idAttribute;
   }
 
-  /** Get if dynamicdestinoations is enabled attribute. */
-  public @Nullable String getEnableDynamicDestinations() {
-    return enableDynamicDestinations;
-  }
+  // /** Get if dynamicdestinoations is enabled attribute. */
+  // public @Nullable String getEnableDynamicDestinations() {
+  //   return enableDynamicDestinations;
+  // }
 
   @Override
   public PDone expand(PCollection<PubsubMessage> input) {

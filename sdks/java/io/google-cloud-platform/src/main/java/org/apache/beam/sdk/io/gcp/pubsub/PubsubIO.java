@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.naming.SizeLimitExceededException;
@@ -1126,6 +1127,7 @@ public class PubsubIO {
 
     abstract @Nullable ValueProvider<PubsubTopic> getTopicProvider();
 
+    // new
     abstract SerializableFunction<T, PubsubTopic> getTopicFunctionProvider();
 
     abstract PubsubClient.PubsubClientFactory getPubsubClientFactory();
@@ -1276,6 +1278,12 @@ public class PubsubIO {
                 + " function.");
       }
       if (getTopicProvider() != null) {
+
+        PCollection<PubsubMessage> pubsubMessages =
+          // input.apply(new PreparePubsubWrite<>(getTopicProvider(), getFormatFn()));
+                    input.apply(new PreparePubsubWrite<>());
+
+
         switch (input.isBounded()) {
           case BOUNDED:
             input.apply(
@@ -1311,18 +1319,17 @@ public class PubsubIO {
                         MoreObjects.firstNonNull(
                             getMaxBatchBytesSize(),
                             PubsubUnboundedSink.DEFAULT_PUBLISH_BATCH_BYTES),
-                        getPubsubRootUrl(),
-                        getTopicFunctionProvider() == null));
+                        getPubsubRootUrl()));
         }
       }
-      if (getTopicFunctionProvider() != null) {
-        /**
-         * Modify the pubsub messages to update the topic based on the provided topic generator
-         * function
-         */
-        PCollection<PubsubMessage> pubsubMessages =
-            input.apply(new PreparePubsubWrite<>(getTopicFunctionProvider(), getFormatFn()));
-      }
+      // if (getTopicFunctionProvider() != null) {
+      //   /**
+      //    * Modify the pubsub messages to update the topic based on the provided topic generator
+      //    * function
+      //    */
+      //   PCollection<PubsubMessage> pubsubMessages =
+      //       input.apply(new PreparePubsubWrite<>(getTopicFunctionProvider(), getFormatFn()));
+      // }
       throw new RuntimeException(); // cases are exhaustive.
     }
 
@@ -1341,10 +1348,21 @@ public class PubsubIO {
     public class PubsubBoundedWriter extends DoFn<T, Void> {
       private transient List<OutgoingMessage> output;
       private transient PubsubClient pubsubClient;
+      private transient ConcurrentHashMap<PubsubTopic, PubsubMessageOutput> outputToTopic;
       private transient int currentOutputBytes;
 
       private int maxPublishBatchByteSize;
       private int maxPublishBatchSize;
+
+      public class PubsubMessageOutput {
+        public List<OutgoingMessage> output;
+        public int currentOutputBytes;
+
+        public PubsubMessageOutput() {
+          this.output = new ArrayList<>();
+          this.currentOutputBytes = 0;
+        }
+      }
 
       PubsubBoundedWriter(int maxPublishBatchSize, int maxPublishBatchByteSize) {
         this.maxPublishBatchSize = maxPublishBatchSize;
@@ -1357,6 +1375,7 @@ public class PubsubIO {
 
       @StartBundle
       public void startBundle(StartBundleContext c) throws IOException {
+        this.outputToTopic = new ConcurrentHashMap<>();
         this.output = new ArrayList<>();
         this.currentOutputBytes = 0;
 
@@ -1379,17 +1398,21 @@ public class PubsubIO {
           throw new SizeLimitExceededException(msg);
         }
 
-        // Checking before adding the message stops us from violating max batch size or bytes
-        if (output.size() >= maxPublishBatchSize
-            || (!output.isEmpty()
-                && (currentOutputBytes + messageSize) >= maxPublishBatchByteSize)) {
-          publish();
-        }
-
         byte[] payload = message.getPayload();
         Map<String, String> attributes = message.getAttributeMap();
         String orderingKey = message.getOrderingKey();
 
+        // Checking before adding the message stops us from violating max batch size or bytes
+        PubsubTopic topic = PubsubTopic.fromPath(message.getTopicPath());
+        PubsubMessageOutput pubsubMessageOutput =
+            outputToTopic.computeIfAbsent(
+                topic, elem -> outputToTopic.put(elem, new PubsubMessageOutput()));
+
+        // Checking before adding the message stops us from violating the max bytes
+        if (((pubsubMessageOutput.currentOutputBytes + payload.length) >= maxPublishBatchByteSize)
+            || (pubsubMessageOutput.output.size() >= maxPublishBatchSize)) {
+          publish(pubsubMessageOutput);
+        }
         com.google.pubsub.v1.PubsubMessage.Builder msgBuilder =
             com.google.pubsub.v1.PubsubMessage.newBuilder()
                 .setData(ByteString.copyFrom(payload))
@@ -1400,29 +1423,31 @@ public class PubsubIO {
         }
 
         // NOTE: The record id is always null.
-        output.add(OutgoingMessage.of(msgBuilder.build(), c.timestamp().getMillis(), null));
-        currentOutputBytes += messageSize;
+        pubsubMessageOutput.output.add(
+            OutgoingMessage.of(msgBuilder.build(), c.timestamp().getMillis(), null));
+        pubsubMessageOutput.currentOutputBytes += messageSize;
       }
 
       @FinishBundle
       public void finishBundle() throws IOException {
-        if (!output.isEmpty()) {
-          publish();
+        for (PubsubMessageOutput pubsubMessageOutput : outputToTopic.values()) {
+          if (!pubsubMessageOutput.output.isEmpty()) {
+            publish(pubsubMessageOutput);
+          }
         }
-        output = null;
-        currentOutputBytes = 0;
+        outputToTopic = null;
         pubsubClient.close();
         pubsubClient = null;
       }
 
-      private void publish() throws IOException {
+      private void publish(PubsubMessageOutput outputMessage) throws IOException {
         PubsubTopic topic = getTopicProvider().get();
         int n =
             pubsubClient.publish(
-                PubsubClient.topicPathFromName(topic.project, topic.topic), output);
-        checkState(n == output.size());
-        output.clear();
-        currentOutputBytes = 0;
+                PubsubClient.topicPathFromName(topic.project, topic.topic), outputMessage.output);
+        checkState(n == outputMessage.output.size());
+        outputMessage.output.clear();
+        outputMessage.currentOutputBytes = 0;
       }
 
       @Override
