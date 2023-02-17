@@ -117,4 +117,9 @@ public class PubsubSinkTest {
   public void testEmptyParseFn() throws Exception {
     testWriteWith("");
   }
+
+  @Test
+  public void testTopicFn() throws Exception {
+    testWriteWith("");
+  }
 }

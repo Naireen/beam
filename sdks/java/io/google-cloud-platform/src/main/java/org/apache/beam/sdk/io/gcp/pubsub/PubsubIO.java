@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.naming.SizeLimitExceededException;
@@ -1019,13 +1020,11 @@ public class PubsubIO {
             "Can't set both the topic and the subscription for " + "a PubsubIO.Read transform");
       }
 
-      @Nullable
-      ValueProvider<TopicPath> topicPath =
+      @Nullable ValueProvider<TopicPath> topicPath =
           getTopicProvider() == null
               ? null
               : NestedValueProvider.of(getTopicProvider(), new TopicPathTranslator());
-      @Nullable
-      ValueProvider<SubscriptionPath> subscriptionPath =
+      @Nullable ValueProvider<SubscriptionPath> subscriptionPath =
           getSubscriptionProvider() == null
               ? null
               : NestedValueProvider.of(getSubscriptionProvider(), new SubscriptionPathTranslator());
@@ -1145,6 +1144,9 @@ public class PubsubIO {
     /** The format function for input PubsubMessage objects. */
     abstract SerializableFunction<T, PubsubMessage> getFormatFn();
 
+    /** The format function for output PubsubMessage objects. */
+    abstract @Nullable SerializableFunction<PubsubMessage, String> getTopicFn();
+
     abstract @Nullable String getPubsubRootUrl();
 
     abstract Builder<T> toBuilder();
@@ -1175,6 +1177,8 @@ public class PubsubIO {
       abstract Builder<T> setIdAttribute(String idAttribute);
 
       abstract Builder<T> setFormatFn(SerializableFunction<T, PubsubMessage> formatFn);
+
+      abstract Builder<T> setTopicFn(SerializableFunction<PubsubMessage, String> topicFn);
 
       abstract Builder<T> setPubsubRootUrl(String pubsubRootUrl);
 
@@ -1261,10 +1265,15 @@ public class PubsubIO {
       return toBuilder().setPubsubRootUrl(pubsubRootUrl).build();
     }
 
+    public Write<T> withTopicFn(SerializableFunction<PubsubMessage, String> topicFn) {
+      return toBuilder().setTopicFn(topicFn).build();
+    }
+
     @Override
     public PDone expand(PCollection<T> input) {
-      if (getTopicProvider() == null) {
-        throw new IllegalStateException("need to set the topic of a PubsubIO.Write transform");
+      if (getTopicProvider() == null && getTopicFn() == null) {
+        throw new IllegalStateException(
+            "need to set the topic of a PubsubIO.Write transform, or the topic function");
       }
 
       switch (input.isBounded()) {
@@ -1293,7 +1302,9 @@ public class PubsubIO {
               .apply(
                   new PubsubUnboundedSink(
                       getPubsubClientFactory(),
-                      NestedValueProvider.of(getTopicProvider(), new TopicPathTranslator()),
+                      getTopicProvider() == null
+                          ? null
+                          : NestedValueProvider.of(getTopicProvider(), new TopicPathTranslator()),
                       getTimestampAttribute(),
                       getIdAttribute(),
                       100 /* numShards */,
@@ -1301,7 +1312,8 @@ public class PubsubIO {
                           getMaxBatchSize(), PubsubUnboundedSink.DEFAULT_PUBLISH_BATCH_SIZE),
                       MoreObjects.firstNonNull(
                           getMaxBatchBytesSize(), PubsubUnboundedSink.DEFAULT_PUBLISH_BATCH_BYTES),
-                      getPubsubRootUrl()));
+                      getPubsubRootUrl(),
+                      getTopicFn()));
       }
       throw new RuntimeException(); // cases are exhaustive.
     }
@@ -1321,10 +1333,19 @@ public class PubsubIO {
     public class PubsubBoundedWriter extends DoFn<T, Void> {
       private transient List<OutgoingMessage> output;
       private transient PubsubClient pubsubClient;
-      private transient int currentOutputBytes;
-
+      private transient ConcurrentHashMap<PubsubTopic, PubsubMessageOutput> outputToTopic;
       private int maxPublishBatchByteSize;
       private int maxPublishBatchSize;
+
+      public class PubsubMessageOutput {
+        public List<OutgoingMessage> output;
+        public int currentOutputBytes;
+
+        public PubsubMessageOutput() {
+          this.output = new ArrayList<>();
+          this.currentOutputBytes = 0;
+        }
+      }
 
       PubsubBoundedWriter(int maxPublishBatchSize, int maxPublishBatchByteSize) {
         this.maxPublishBatchSize = maxPublishBatchSize;
@@ -1337,8 +1358,7 @@ public class PubsubIO {
 
       @StartBundle
       public void startBundle(StartBundleContext c) throws IOException {
-        this.output = new ArrayList<>();
-        this.currentOutputBytes = 0;
+        this.outputToTopic = new ConcurrentHashMap<>();
 
         // NOTE: idAttribute is ignored.
         this.pubsubClient =
@@ -1359,11 +1379,22 @@ public class PubsubIO {
           throw new SizeLimitExceededException(msg);
         }
 
+        PubsubTopic topic;
+        if (getTopicFn() != null) {
+          topic = PubsubTopic.fromPath(getTopicFn().apply(message));
+        } else {
+          topic = getTopicProvider().get();
+        }
+        PubsubMessageOutput pubsubMessageOutput =
+            outputToTopic.computeIfAbsent(
+                topic, elem -> outputToTopic.put(elem, new PubsubMessageOutput()));
+
         // Checking before adding the message stops us from violating max batch size or bytes
-        if (output.size() >= maxPublishBatchSize
+        if (pubsubMessageOutput.output.size() >= maxPublishBatchSize
             || (!output.isEmpty()
-                && (currentOutputBytes + messageSize) >= maxPublishBatchByteSize)) {
-          publish();
+                && (pubsubMessageOutput.currentOutputBytes + messageSize)
+                    >= maxPublishBatchByteSize)) {
+          publish(topic, pubsubMessageOutput);
         }
 
         byte[] payload = message.getPayload();
@@ -1380,29 +1411,31 @@ public class PubsubIO {
         }
 
         // NOTE: The record id is always null.
-        output.add(OutgoingMessage.of(msgBuilder.build(), c.timestamp().getMillis(), null));
-        currentOutputBytes += messageSize;
+        pubsubMessageOutput.output.add(
+            OutgoingMessage.of(msgBuilder.build(), c.timestamp().getMillis(), null));
+        pubsubMessageOutput.currentOutputBytes += messageSize;
       }
 
       @FinishBundle
       public void finishBundle() throws IOException {
-        if (!output.isEmpty()) {
-          publish();
+        for (Map.Entry<PubsubTopic, PubsubMessageOutput> entry : outputToTopic.entrySet()) {
+          if (!entry.getValue().output.isEmpty()) {
+            publish(entry.getKey(), entry.getValue());
+          }
         }
-        output = null;
-        currentOutputBytes = 0;
+        outputToTopic = null;
         pubsubClient.close();
         pubsubClient = null;
       }
 
-      private void publish() throws IOException {
-        PubsubTopic topic = getTopicProvider().get();
+      private void publish(PubsubTopic topic, PubsubMessageOutput outputMessage)
+          throws IOException {
         int n =
             pubsubClient.publish(
-                PubsubClient.topicPathFromName(topic.project, topic.topic), output);
-        checkState(n == output.size());
-        output.clear();
-        currentOutputBytes = 0;
+                PubsubClient.topicPathFromName(topic.project, topic.topic), outputMessage.output);
+        checkState(n == outputMessage.output.size());
+        outputMessage.output.clear();
+        outputMessage.currentOutputBytes = 0;
       }
 
       @Override

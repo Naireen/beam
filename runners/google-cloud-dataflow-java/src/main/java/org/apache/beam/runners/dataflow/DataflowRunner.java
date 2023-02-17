@@ -427,7 +427,8 @@ public class DataflowRunner extends PipelineRunner<DataflowPipelineJob> {
         sdkContainerOption == null
             || workerHarnessOption == null
             || sdkContainerOption.equals(workerHarnessOption),
-        "Cannot use legacy option workerHarnessContainerImage with sdkContainerImage. Prefer sdkContainerImage.");
+        "Cannot use legacy option workerHarnessContainerImage with sdkContainerImage. Prefer"
+            + " sdkContainerImage.");
 
     // Default to new option, which may be null.
     String containerImage = workerOptions.getSdkContainerImage();
@@ -435,7 +436,8 @@ public class DataflowRunner extends PipelineRunner<DataflowPipelineJob> {
         && workerOptions.getSdkContainerImage() == null) {
       // Set image to old option if old option was set but new option is not set.
       LOG.warn(
-          "Prefer --sdkContainerImage over deprecated legacy option --workerHarnessContainerImage.");
+          "Prefer --sdkContainerImage over deprecated legacy option"
+              + " --workerHarnessContainerImage.");
       containerImage = workerOptions.getWorkerHarnessContainerImage();
     }
 
@@ -1100,7 +1102,10 @@ public class DataflowRunner extends PipelineRunner<DataflowPipelineJob> {
           || hasExperiment(options, "disable_runner_v2_until_2023")
           || hasExperiment(options, "disable_prime_runner_v2")) {
         throw new IllegalArgumentException(
-            "Runner V2 both disabled and enabled: at least one of ['beam_fn_api', 'use_unified_worker', 'use_runner_v2', 'use_portable_job_submission'] is set and also one of ['disable_runner_v2', 'disable_runner_v2_until_2023', 'disable_prime_runner_v2'] is set.");
+            "Runner V2 both disabled and enabled: at least one of ['beam_fn_api',"
+                + " 'use_unified_worker', 'use_runner_v2', 'use_portable_job_submission'] is set"
+                + " and also one of ['disable_runner_v2', 'disable_runner_v2_until_2023',"
+                + " 'disable_prime_runner_v2'] is set.");
       }
       List<String> experiments =
           new ArrayList<>(options.getExperiments()); // non-null if useUnifiedWorker is true
@@ -1159,8 +1164,7 @@ public class DataflowRunner extends PipelineRunner<DataflowPipelineJob> {
     // need the default environment.
     SdkComponents portableComponents = SdkComponents.create();
     portableComponents.registerEnvironment(
-        defaultEnvironmentForDataflow
-            .toBuilder()
+        defaultEnvironmentForDataflow.toBuilder()
             .addAllDependencies(getDefaultArtifacts())
             .addAllCapabilities(Environments.getJavaCapabilities())
             .build());
@@ -1192,8 +1196,7 @@ public class DataflowRunner extends PipelineRunner<DataflowPipelineJob> {
     // Capture the SdkComponents for look up during step translations
     SdkComponents dataflowV1Components = SdkComponents.create();
     dataflowV1Components.registerEnvironment(
-        defaultEnvironmentForDataflow
-            .toBuilder()
+        defaultEnvironmentForDataflow.toBuilder()
             .addAllDependencies(getDefaultArtifacts())
             .addAllCapabilities(Environments.getJavaCapabilities())
             .build());
@@ -1597,8 +1600,8 @@ public class DataflowRunner extends PipelineRunner<DataflowPipelineJob> {
         return true;
       } else if (hasExperiment(options, UNSAFELY_ATTEMPT_TO_PROCESS_UNBOUNDED_DATA_IN_BATCH_MODE)) {
         LOG.info(
-            "Turning a batch pipeline into streaming due to unbounded PCollection(s) has been avoided! "
-                + "Unbounded PCollection(s): {}",
+            "Turning a batch pipeline into streaming due to unbounded PCollection(s) has been"
+                + " avoided! Unbounded PCollection(s): {}",
             visitor.unboundedPCollections);
         return false;
       } else {
@@ -1610,7 +1613,8 @@ public class DataflowRunner extends PipelineRunner<DataflowPipelineJob> {
         return true;
       }
     }
-  };
+  }
+  ;
 
   /** Returns the DataflowPipelineTranslator associated with this object. */
   public DataflowPipelineTranslator getTranslator() {
@@ -1926,6 +1930,11 @@ public class DataflowRunner extends PipelineRunner<DataflowPipelineJob> {
       stepContext.addInput(
           PropertyNames.PUBSUB_SERIALIZED_ATTRIBUTES_FN,
           byteArrayToJsonString(serializeToByteArray(new IdentityMessageFn())));
+      if (overriddenTransform.getTopicFn != null) {
+        stepContext.addInput(
+            PropertyNames.PUBSUB_SERIALIZED_TOPIC_FN,
+            byteArrayToJsonString(serializeToByteArray(overriddenTransform.getTopicFn )));
+      }
 
       // Using a GlobalWindowCoder as a place holder because GlobalWindowCoder is known coder.
       stepContext.addEncodingInput(

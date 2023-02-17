@@ -43,11 +43,13 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.apache.beam.sdk.transforms.SerializableFunction;
 
 /** Test PubsubUnboundedSink. */
 @RunWith(JUnit4.class)
 public class PubsubUnboundedSinkTest implements Serializable {
-  private static final TopicPath TOPIC = PubsubClient.topicPathFromName("testProject", "testTopic");
+  private static final TopicPath TOPIC =
+      PubsubClient.topicPathFromName("test-Project", "testTopic");
   private static final String DATA = "testData";
   private static final ImmutableMap<String, String> ATTRIBUTES =
       ImmutableMap.<String, String>builder().put("a", "b").put("c", "d").build();
@@ -120,6 +122,7 @@ public class PubsubUnboundedSinkTest implements Serializable {
               batchBytes,
               Duration.standardSeconds(2),
               RecordIdMethod.DETERMINISTIC,
+              null,
               null);
       p.apply(Create.of(ImmutableList.of(DATA))).apply(ParDo.of(new Stamp(ATTRIBUTES))).apply(sink);
       p.run();
@@ -151,6 +154,7 @@ public class PubsubUnboundedSinkTest implements Serializable {
               1 /* batchBytes */,
               Duration.standardSeconds(2),
               RecordIdMethod.DETERMINISTIC,
+              null,
               null);
       p.apply(Create.of(ImmutableList.of(DATA)))
           .apply(ParDo.of(new Stamp(null /* attributes */)))
@@ -191,6 +195,7 @@ public class PubsubUnboundedSinkTest implements Serializable {
               batchBytes,
               Duration.standardSeconds(2),
               RecordIdMethod.DETERMINISTIC,
+              null,
               null);
       p.apply(Create.of(data)).apply(ParDo.of(new Stamp())).apply(sink);
       p.run();
@@ -235,10 +240,52 @@ public class PubsubUnboundedSinkTest implements Serializable {
               batchBytes,
               Duration.standardSeconds(2),
               RecordIdMethod.DETERMINISTIC,
+              null,
               null);
       p.apply(Create.of(data)).apply(ParDo.of(new Stamp())).apply(sink);
       p.run();
     }
+    // The PubsubTestClientFactory will assert fail on close if the actual published
+    // message does not match the expected publish message.
+  }
+
+
+  @Test
+  public void writeWithTopicFn() throws IOException {
+    List<OutgoingMessage> outgoing =
+        ImmutableList.of(
+            OutgoingMessage.of(
+                com.google.pubsub.v1.PubsubMessage.newBuilder()
+                    .setData(ByteString.copyFromUtf8(DATA))
+                    .putAllAttributes(ATTRIBUTES)
+                    .build(),
+                TIMESTAMP,
+                getRecordId(DATA)));
+    int batchSize = 1;
+    int batchBytes = 1;
+    try (PubsubTestClientFactory factory =
+        PubsubTestClient.createFactoryForPublish(TOPIC, outgoing, ImmutableList.of())) {
+      PubsubUnboundedSink sink =
+          new PubsubUnboundedSink(
+              factory,
+              null,
+              TIMESTAMP_ATTRIBUTE,
+              ID_ATTRIBUTE,
+              NUM_SHARDS,
+              batchSize,
+              batchBytes,
+              Duration.standardSeconds(2),
+              RecordIdMethod.DETERMINISTIC,
+              null,
+                 (SerializableFunction<PubsubMessage, String>)
+                input1 -> {
+                  return "projects/test-Project/topics/testTopic";
+                });
+      p.apply(Create.of(ImmutableList.of(DATA))).apply(ParDo.of(new Stamp(ATTRIBUTES))).apply(sink);
+      p.run();
+    }
+    // The PubsubTestClientFactory will assert fail on close if the actual published
+    // message does not match the expected publish message.
     // The PubsubTestClientFactory will assert fail on close if the actual published
     // message does not match the expected publish message.
   }

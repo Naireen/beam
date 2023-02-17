@@ -35,6 +35,7 @@ import org.apache.beam.sdk.runners.AppliedPTransform;
 import org.apache.beam.sdk.testing.TestPipeline;
 import org.apache.beam.sdk.transforms.Create;
 import org.apache.beam.sdk.transforms.resourcehints.ResourceHints;
+import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PDone;
 import org.apache.beam.sdk.values.PValues;
@@ -43,13 +44,15 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.apache.beam.sdk.transforms.SerializableFunction;
 
 /** Test RunnerImplementedSinkTranslator. */
 @RunWith(JUnit4.class)
 public class PubSubWritePayloadTranslationTest {
   private static final String TIMESTAMP_ATTRIBUTE = "timestamp";
   private static final String ID_ATTRIBUTE = "id";
-  private static final TopicPath TOPIC = PubsubClient.topicPathFromName("testProject", "testTopic");
+  private static final TopicPath TOPIC =
+      PubsubClient.topicPathFromName("test-Project", "testTopic");
   private final PubSubPayloadTranslation.PubSubWritePayloadTranslator sinkTranslator =
       new PubSubWritePayloadTranslator();
 
@@ -68,9 +71,11 @@ public class PubSubWritePayloadTranslationTest {
             0,
             Duration.ZERO,
             null,
+            null,
             null);
     PubsubUnboundedSink.PubsubSink pubsubSink = new PubsubSink(pubsubUnboundedSink);
-    PCollection<byte[]> input = pipeline.apply(Create.of(new byte[0]));
+    PCollection<KV<String, byte[]>> input =
+        pipeline.apply(Create.of(KV.of(TOPIC.getPath(), new byte[0])));
     PDone output = input.apply(pubsubSink);
     AppliedPTransform<?, ?, PubsubSink> appliedPTransform =
         AppliedPTransform.of(
@@ -106,9 +111,11 @@ public class PubSubWritePayloadTranslationTest {
             0,
             Duration.ZERO,
             null,
+            null,
             null);
     PubsubSink pubsubSink = new PubsubSink(pubsubUnboundedSinkSink);
-    PCollection<byte[]> input = pipeline.apply(Create.of(new byte[0]));
+    PCollection<KV<String, byte[]>> input =
+        pipeline.apply(Create.of(KV.of(TOPIC.getPath(), new byte[0])));
     PDone output = input.apply(pubsubSink);
     AppliedPTransform<?, ?, PubsubSink> appliedPTransform =
         AppliedPTransform.of(
@@ -130,5 +137,48 @@ public class PubSubWritePayloadTranslationTest {
     assertTrue(payload.getTopic().isEmpty());
     assertEquals(TIMESTAMP_ATTRIBUTE, payload.getTimestampAttribute());
     assertEquals(ID_ATTRIBUTE, payload.getIdAttribute());
+  }
+
+  @Test
+  public void testTranslateSinkWithOnlyTopicFn() throws Exception {
+    // ValueProvider<TopicPath> runtimeProvider = pipeline.newProvider(TOPIC);
+    PubsubUnboundedSink pubsubUnboundedSinkSink =
+        new PubsubUnboundedSink(
+            null,
+            null,
+            TIMESTAMP_ATTRIBUTE,
+            ID_ATTRIBUTE,
+            0,
+            0,
+            0,
+            Duration.ZERO,
+            null,
+            null,
+            (SerializableFunction<PubsubMessage, String>)
+                input1 -> {
+                  return TOPIC.getFullPath();
+                });
+    PubsubSink pubsubSink = new PubsubSink(pubsubUnboundedSinkSink);
+    PCollection<KV<String, byte[]>> input =
+        pipeline.apply(Create.of(KV.of(TOPIC.getPath(), new byte[0])));
+    PDone output = input.apply(pubsubSink);
+    AppliedPTransform<?, ?, PubsubSink> appliedPTransform =
+        AppliedPTransform.of(
+            "sink",
+            PValues.expandInput(input),
+            PValues.expandOutput(output),
+            pubsubSink,
+            ResourceHints.create(),
+            pipeline);
+    SdkComponents components = SdkComponents.create();
+    components.registerEnvironment(Environments.createDockerEnvironment("java"));
+    RunnerApi.FunctionSpec spec = sinkTranslator.translate(appliedPTransform, components);
+
+    assertEquals(PTransformTranslation.PUBSUB_WRITE, spec.getUrn());
+    PubSubWritePayload payload = PubSubWritePayload.parseFrom(spec.getPayload());
+    System.out.println(payload);
+    assertTrue(payload.getTopic().isEmpty());
+    assertEquals(ID_ATTRIBUTE, payload.getIdAttribute());
+    assertEquals(TIMESTAMP_ATTRIBUTE, payload.getTimestampAttribute());
   }
 }

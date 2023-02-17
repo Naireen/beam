@@ -42,6 +42,13 @@ public class PubsubMessage {
 
     abstract @Nullable String getOrderingKey();
 
+    // abstract @Nullable String getTopic();
+
+    // @AutoValue.Builder
+    // abstract static class Builder{
+    //     abstract Builder setTopic(String topic);
+    // }
+
     static Impl create(
         byte[] payload,
         @Nullable Map<String, String> attributes,
@@ -69,6 +76,24 @@ public class PubsubMessage {
       @Nullable String orderingKey) {
     impl = Impl.create(payload, attributes, messageId, orderingKey);
   }
+
+  // public PubsubMessage(
+  //     byte[] payload,
+  //     @Nullable Map<String, String> attributes,
+  //     @Nullable String messageId,
+  //     @Nullable String orderingKey) {
+  //   impl = Impl.create(payload, attributes, messageId, orderingKey);
+  // }
+
+
+  // public PubsubMessage(
+  //     byte[] payload,
+  //     @Nullable Map<String, String> attributes,
+  //     @Nullable String messageId,
+  //     @Nullable String orderingKey,
+  //     @Nullable String topic) {
+  //   impl = Impl.create(payload, attributes, messageId, orderingKey, topic);
+  // }
 
   /** Returns the main PubSub message. */
   public byte[] getPayload() {

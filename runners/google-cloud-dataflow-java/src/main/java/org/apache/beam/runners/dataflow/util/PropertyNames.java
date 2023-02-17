@@ -46,6 +46,7 @@ public class PropertyNames {
   public static final String PARALLEL_INPUT = "parallel_input";
   public static final String PUBSUB_ID_ATTRIBUTE = "pubsub_id_label";
   public static final String PUBSUB_SERIALIZED_ATTRIBUTES_FN = "pubsub_serialized_attributes_fn";
+  public static final String PUBSUB_SERIALIZED_TOPIC_FN = "pubsub_serialized_topic_fn";
   public static final String PUBSUB_SUBSCRIPTION = "pubsub_subscription";
   public static final String PUBSUB_SUBSCRIPTION_OVERRIDE = "pubsub_subscription_runtime_override";
   public static final String PUBSUB_TIMESTAMP_ATTRIBUTE = "pubsub_timestamp_label";

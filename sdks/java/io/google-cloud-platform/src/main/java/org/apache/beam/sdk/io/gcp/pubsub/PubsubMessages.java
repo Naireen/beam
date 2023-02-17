@@ -21,7 +21,9 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import java.util.Map;
 import org.apache.beam.sdk.transforms.SerializableFunction;
+import org.apache.beam.sdk.values.KV;
 import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+// import com.google.pubsub.v1.PubsubMessage;
 
 /** Common util functions for converting between PubsubMessage proto and {@link PubsubMessage}. */
 public final class PubsubMessages {
@@ -80,6 +82,38 @@ public final class PubsubMessages {
     }
   }
 
+  // Convert the PubsubMessage to a PubsubMessage proto, then return its serialized representation.
+  public static class ParsePayloadAsPubsubMessageProtoWithTopicFn
+      implements SerializableFunction<PubsubMessage, KV<String, byte[]>> {
+
+    private final SerializableFunction<PubsubMessage, String> topicFn;
+
+    public ParsePayloadAsPubsubMessageProtoWithTopicFn(
+        SerializableFunction<PubsubMessage, String> topicFn) {
+      this.topicFn = topicFn;
+    }
+
+    @Override
+    public KV<String, byte[]> apply(PubsubMessage input) {
+      return KV.of(this.topicFn.apply(input), toProto(input).toByteArray());
+    }
+  }
+
+  // Convert the PubsubMessage to a PubsubMessage proto, then return its serialized representation.
+  public static class ParsePayloadAsPubsubMessageProtoWithTopic
+      implements SerializableFunction<PubsubMessage, KV<String, byte[]>> {
+
+    private final String topic;
+
+    public ParsePayloadAsPubsubMessageProtoWithTopic(String topic) {
+      this.topic = topic;
+    }
+
+    @Override
+    public KV<String, byte[]> apply(PubsubMessage input) {
+      return KV.of(this.topic, toProto(input).toByteArray());
+    }
+  }
   public static class DeserializeBytesIntoPubsubMessagePayloadOnly
       implements SerializableFunction<byte[], PubsubMessage> {
 

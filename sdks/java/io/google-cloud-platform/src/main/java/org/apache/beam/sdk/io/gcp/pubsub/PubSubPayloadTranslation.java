@@ -115,11 +115,13 @@ public class PubSubPayloadTranslation {
         SdkComponents components) {
       PubSubWritePayload.Builder payloadBuilder = PubSubWritePayload.newBuilder();
       ValueProvider<TopicPath> topicProvider = transform.getTransform().outer.getTopicProvider();
-      if (topicProvider.isAccessible()) {
-        payloadBuilder.setTopic(topicProvider.get().getFullPath());
-      } else {
-        payloadBuilder.setTopicRuntimeOverridden(
-            ((NestedValueProvider) topicProvider).propertyName());
+      if (topicProvider != null) {
+        if (topicProvider.isAccessible()) {
+          payloadBuilder.setTopic(topicProvider.get().getFullPath());
+        } else {
+          payloadBuilder.setTopicRuntimeOverridden(
+              ((NestedValueProvider) topicProvider).propertyName());
+        }
       }
       if (transform.getTransform().outer.getTimestampAttribute() != null) {
         payloadBuilder.setTimestampAttribute(
