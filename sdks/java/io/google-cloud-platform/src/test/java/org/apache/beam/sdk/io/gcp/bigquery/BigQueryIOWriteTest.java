@@ -3044,6 +3044,32 @@ public class BigQueryIOWriteTest implements Serializable {
   }
 
   @Test
+  public void testWriteWithStorageApiWithoutSettingShardsEnableAutoSharding() throws Exception {
+    assumeTrue(useStorageApi);
+    assumeTrue(p.getOptions().as(BigQueryOptions.class).getNumStorageWriteApiStreams() == 0);
+    BigQueryIO.Write<TableRow> write =
+        BigQueryIO.writeTableRows()
+            .to("dataset-id.table-id")
+            .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+            .withSchema(
+                new TableSchema()
+                    .setFields(
+                        ImmutableList.of(new TableFieldSchema().setName("name").setType("STRING"))))
+            .withMethod(Method.STORAGE_WRITE_API)
+            .withoutValidation()
+            .withTestServices(fakeBqServices);
+
+    p.apply(
+            Create.of(new TableRow().set("name", "a"), new TableRow().set("name", "b"))
+                .withCoder(TableRowJsonCoder.of()))
+        .apply("WriteToBQ", write);
+    p.run();
+    assertThat(
+        fakeDatasetService.getAllRows("project-id", "dataset-id", "table-id"),
+        containsInAnyOrder(new TableRow().set("name", "a"), new TableRow().set("name", "b")));
+  }
+
+  @Test
   public void testStorageWriteWithMultipleAppendsPerStream() throws Exception {
     assumeTrue(useStorageApi);
 

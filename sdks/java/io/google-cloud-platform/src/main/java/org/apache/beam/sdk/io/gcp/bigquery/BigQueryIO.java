@@ -3659,6 +3659,11 @@ public class BigQueryIO {
                   getIgnoreUnknownValues(),
                   getAutoSchemaUpdate());
         }
+        int numShards = getStorageApiNumStreams(bqOptions);
+        boolean enableAutoSharding = getAutoSharding();
+        if (numShards == 0) {
+          enableAutoSharding = true;
+        }
 
         int numShards = getStorageApiNumStreams(bqOptions);
         boolean enableAutoSharding = getAutoSharding();
