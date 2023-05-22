@@ -38,6 +38,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -493,9 +494,9 @@ public class StorageApiWriteUnshardedRecords<DestinationT, ElementT>
             // the ProtoRows iterable at 2MB and the max request size is 10MB, this scenario seems
             // nearly impossible.
             LOG.error(
-                "A request containing more than one row is over the request size limit of "
-                    + maxRequestSize
-                    + ". This is unexpected. All rows in the request will be sent to the failed-rows PCollection.");
+                "A request containing more than one row is over the request size limit of {}. "
+                    + "This is unexpected. All rows in the request will be sent to the failed-rows PCollection.",
+                maxRequestSize);
           }
           for (int i = 0; i < inserts.getSerializedRowsCount(); ++i) {
             ByteString rowBytes = inserts.getSerializedRows(i);
@@ -571,7 +572,7 @@ public class StorageApiWriteUnshardedRecords<DestinationT, ElementT>
                             failedRow, error.getRowIndexToErrorMessage().get(failedIndex)),
                         timestamp);
                   } catch (InvalidProtocolBufferException e) {
-                    LOG.error("Failed to insert row and could not parse the result!");
+                    LOG.error("Failed to insert row and could not parse the result!", e);
                   }
                 }
                 rowsSentToFailedRowsCollection.inc(failedRowIndices.size());
@@ -659,7 +660,7 @@ public class StorageApiWriteUnshardedRecords<DestinationT, ElementT>
                     org.joda.time.Instant timestamp = c.timestamps.get(i);
                     successfulRowsReceiver.outputWithTimestamp(row, timestamp);
                   } catch (InvalidProtocolBufferException e) {
-                    LOG.warn("Failure parsing TableRow: " + e);
+                    LOG.warn("Failure parsing TableRow", e);
                   }
                 }
               }
@@ -685,16 +686,22 @@ public class StorageApiWriteUnshardedRecords<DestinationT, ElementT>
 
       void postFlush() {
         // If we got a response indicating an updated schema, recreate the client.
-        if (this.appendClientInfo != null) {
+        if (this.appendClientInfo != null && autoUpdateSchema) {
           @Nullable
           StreamAppendClient streamAppendClient = appendClientInfo.getStreamAppendClient();
           @Nullable
-          TableSchema updatedTableSchema =
+          TableSchema updatedTableSchemaReturned =
               (streamAppendClient != null) ? streamAppendClient.getUpdatedSchema() : null;
-          if (updatedTableSchema != null) {
-            invalidateWriteStream();
-            appendClientInfo =
-                Preconditions.checkStateNotNull(getAppendClientInfo(false, updatedTableSchema));
+          if (updatedTableSchemaReturned != null) {
+            Optional<TableSchema> updatedTableSchema =
+                TableSchemaUpdateUtils.getUpdatedSchema(
+                    this.initialTableSchema, updatedTableSchemaReturned);
+            if (updatedTableSchema.isPresent()) {
+              invalidateWriteStream();
+              appendClientInfo =
+                  Preconditions.checkStateNotNull(
+                      getAppendClientInfo(false, updatedTableSchema.get()));
+            }
           }
         }
       }
