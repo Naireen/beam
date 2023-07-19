@@ -3062,8 +3062,11 @@ public class BigQueryIO {
       }
     }
 
-    private Write.Method resolveMethod(PCollection<T> input) {
+    @VisibleForTesting
+    public Write.Method resolveMethod(PCollection<T> input) {
       if (getMethod() != Write.Method.DEFAULT) {
+        LOG.warn("xxx DEFAULT WRITE, no method is set.");
+        LOG.warn( getMethod().name());
         return getMethod();
       }
       if (getRowMutationInformationFn() != null) {
@@ -3075,10 +3078,10 @@ public class BigQueryIO {
             ? Method.STORAGE_API_AT_LEAST_ONCE
             : Method.STORAGE_WRITE_API;
       }
-      // By default, when writing an Unbounded PCollection, we use StreamingInserts and
-      // BigQuery's streaming import API.
+      // By default, when writing an Unbounded PCollection, we use STORAGE_WRITE_API. 
+      LOG.warn("If updating pipeline from a java SDK version before 2.51, please explicitly enable STREAMING_INSERTS for update compatibility.");
       return (input.isBounded() == IsBounded.UNBOUNDED)
-          ? Write.Method.STREAMING_INSERTS
+          ? Write.Method.STORAGE_WRITE_API
           : Write.Method.FILE_LOADS;
     }
 
@@ -3089,7 +3092,8 @@ public class BigQueryIO {
       if (options.getStorageWriteApiTriggeringFrequencySec() != null) {
         return Duration.standardSeconds(options.getStorageWriteApiTriggeringFrequencySec());
       }
-      return null;
+      // Return a default value.
+      return  Duration.standardSeconds(60);
     }
 
     private int getStorageApiNumStreams(BigQueryOptions options) {

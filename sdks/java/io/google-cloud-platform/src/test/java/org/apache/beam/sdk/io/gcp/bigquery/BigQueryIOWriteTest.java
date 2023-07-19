@@ -3424,4 +3424,34 @@ public class BigQueryIOWriteTest implements Serializable {
         fakeDatasetService.getAllRows("project-id", "dataset-id", "table-id"),
         containsInAnyOrder(Iterables.toArray(expected, TableRow.class)));
   }
+
+  @Test
+  public void testDefaultWriteMethodEnablesStorageWriteApi() throws Exception {
+    assumeTrue(!useStorageApiApproximate);
+
+    List<TableRow> rows = new ArrayList<TableRow>(100);
+    for (int i = 0; i < 100; i++) {
+      rows.add(new TableRow().set("num", String.valueOf(i)).set("name", String.valueOf(i)));
+    }
+
+    BigQueryIO.Write<TableRow> write =
+        BigQueryIO.writeTableRows()
+            .to("dataset-id.table-id")
+            .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+            .withSchema(
+                new TableSchema()
+                    .setFields(
+                        ImmutableList.of(new TableFieldSchema().setName("name").setType("STRING"))))
+            .withTestServices(fakeBqServices);
+
+    // This is because no write method is explicitly set.
+    assertEquals("DEFAULT", write.getMethod().name());
+
+
+    PCollection<TableRow> input = p.apply("CreateSource", Create.of(rows));
+    // Force unbounded input
+    input = input.setIsBoundedInternal(PCollection.IsBounded.UNBOUNDED);
+    p.run();
+    assertEquals("STORAGE_WRITE_API", write.resolveMethod(input).name());
+  }
 }
