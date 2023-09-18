@@ -117,6 +117,27 @@ class YamlTransformE2ETest(unittest.TestCase):
           ''')
       assert_that(result, equal_to([41, 43, 47, 53, 61, 71, 83, 97, 113, 131]))
 
+  def create_has_schema(self):
+    with beam.Pipeline(options=beam.options.pipeline_options.PipelineOptions(
+        pickle_library='cloudpickle')) as p:
+      result = p | YamlTransform(
+          '''
+          type: chain
+          transforms:
+            - type: Create
+              config:
+                  elements: [{a: 1, b: 'x'}, {a: 2, b: 'y'}]
+            - type: MapToFields
+              config:
+                  language: python
+                  fields:
+                      repeated: a * b
+            - type: PyMap
+              config:
+                  fn: "lambda x: x.repeated"
+          ''')
+      assert_that(result, equal_to(['x', 'yy']))
+
   def test_implicit_flatten(self):
     with beam.Pipeline(options=beam.options.pipeline_options.PipelineOptions(
         pickle_library='cloudpickle')) as p:
@@ -229,8 +250,72 @@ class YamlTransformE2ETest(unittest.TestCase):
             output: AnotherFilter
             ''')
 
+  def test_empty_inputs_throws_error(self):
+    with beam.Pipeline(options=beam.options.pipeline_options.PipelineOptions(
+        pickle_library='cloudpickle')) as p:
+      with self.assertRaisesRegex(ValueError,
+                                  'Missing inputs for transform at '
+                                  '"EmptyInputOkButYamlDoesntKnow" at line .*'):
+        _ = p | YamlTransform(
+            '''
+            type: composite
+            transforms:
+              - type: PyTransform
+                name: EmptyInputOkButYamlDoesntKnow
+                config:
+                  constructor: apache_beam.Impulse
+            ''')
+
+  def test_empty_inputs_ok_in_source(self):
+    with beam.Pipeline(options=beam.options.pipeline_options.PipelineOptions(
+        pickle_library='cloudpickle')) as p:
+      # Does not throw an error like it does above.
+      _ = p | YamlTransform(
+          '''
+          type: composite
+          source:
+            type: PyTransform
+            name: EmptyInputOkButYamlDoesntKnow
+            config:
+              constructor: apache_beam.Impulse
+          ''')
+
+  def test_empty_inputs_ok_if_explicit(self):
+    with beam.Pipeline(options=beam.options.pipeline_options.PipelineOptions(
+        pickle_library='cloudpickle')) as p:
+      # Does not throw an error like it does above.
+      _ = p | YamlTransform(
+          '''
+          type: composite
+          transforms:
+            - type: PyTransform
+              name: EmptyInputOkButYamlDoesntKnow
+              input: {}
+              config:
+                constructor: apache_beam.Impulse
+          ''')
+
+  def test_annotations(self):
+    t = LinearTransform(5, b=100)
+    annotations = t.annotations()
+    with beam.Pipeline(options=beam.options.pipeline_options.PipelineOptions(
+        pickle_library='cloudpickle')) as p:
+      result = p | YamlTransform(
+          '''
+          type: chain
+          transforms:
+            - type: Create
+              config:
+                elements: [0, 1, 2, 3]
+            - type: %r
+              config: %s
+          ''' % (annotations['yaml_type'], annotations['yaml_args']))
+      assert_that(result, equal_to([100, 105, 110, 115]))
+
 
 class CreateTimestamped(beam.PTransform):
+  _yaml_requires_inputs = False
+
   def __init__(self, elements):
     self._elements = elements
 
@@ -608,6 +693,19 @@ class ProviderAffinityTest(unittest.TestCase):
           result3,
           equal_to([('provider3', 'provider3', 'provider4', 'provider4')]),
           label='StartWith3')
+
+
+@beam.transforms.ptransform.annotate_yaml
+class LinearTransform(beam.PTransform):
+  """A transform used for testing annotate_yaml."""
+  def __init__(self, a, b):
+    self._a = a
+    self._b = b
+
+  def expand(self, pcoll):
+    a = self._a
+    b = self._b
+    return pcoll | beam.Map(lambda x: a * x + b)
 
 
 if __name__ == '__main__':
