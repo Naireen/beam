@@ -59,6 +59,7 @@ __all__ = [
     'TFTOperation',
     'ScaleByMinMax',
     'NGrams',
+    'BagOfWords',
 ]
 
 # Register the expected input types for each operation
@@ -101,12 +102,44 @@ class TFTOperation(BaseOperation[common_types.TensorType,
     """
     return {}
 
+  @tf.function
+  def _split_string_with_delimiter(self, data, delimiter):
+    """
+    only applicable to string columns.
+    """
+    data = tf.sparse.to_dense(data)
+    # this method acts differently compared to tf.strings.split
+    # this will split the string based on multiple delimiters while
+    # the latter will split the string based on a single delimiter.
+    fn = lambda data: tf.compat.v1.string_split(
+        data, delimiter, result_type='RaggedTensor')
+    # tf.compat.v1.string_split works on a single string. Use tf.map_fn
+    # to apply the function on each element of the input data.
+    data = tf.map_fn(
+        fn,
+        data,
+        fn_output_signature=tf.RaggedTensorSpec(
+            tf.TensorShape([None, None]), tf.string))
+    data = data.values.to_sparse()
+    # the columns of the sparse tensor are suffixed with $indices, $values
+    # related to sparse tensor. Create a new sparse tensor by extracting
+    # the indices, values and dense_shape from the original sparse tensor
+    # to preserve the original column name.
+    data = tf.sparse.SparseTensor(
+        indices=data.indices, values=data.values, dense_shape=data.dense_shape)
+    # for list of string, batch dimensions becomes inverted after tf.map_fn,
+    #  transpose the data to get the original shape.
+    if tf.shape(data)[1] == 1:
+      data = tf.sparse.transpose(data)
+    return data
+
 
 @register_input_dtype(str)
 class ComputeAndApplyVocabulary(TFTOperation):
   def __init__(
       self,
       columns: List[str],
+      split_string_by_delimiter: Optional[str] = None,
       *,
       default_value: Any = -1,
       top_k: Optional[int] = None,
@@ -121,6 +154,8 @@ class ComputeAndApplyVocabulary(TFTOperation):
 
     Args:
       columns: List of column names to apply the transformation.
+      split_string_by_delimiter: (Optional) A string that specifies the
+        delimiter to split strings.
       default_value: (Optional) The value to use for out-of-vocabulary values.
       top_k: (Optional) The number of most frequent tokens to keep.
       frequency_threshold: (Optional) Limit the generated vocabulary only to
@@ -143,10 +178,16 @@ class ComputeAndApplyVocabulary(TFTOperation):
     self._vocab_filename = vocab_filename if vocab_filename else (
         'compute_and_apply_vocab')
     self._name = name
+    self.split_string_by_delimiter = split_string_by_delimiter
 
   def apply_transform(
       self, data: common_types.TensorType,
       output_column_name: str) -> Dict[str, common_types.TensorType]:
+
+    if self.split_string_by_delimiter:
+      data = self._split_string_with_delimiter(
+          data, self.split_string_by_delimiter)
+
     return {
         output_column_name: tft.compute_and_apply_vocabulary(
             x=data,
@@ -408,7 +449,8 @@ class TFIDF(TFTOperation):
     self.tfidf_weight = None
 
   def apply_transform(
-      self, data: tf.SparseTensor, output_column_name: str) -> tf.SparseTensor:
+      self, data: common_types.TensorType,
+      output_column_name: str) -> common_types.TensorType:
 
     if self.vocab_size is None:
       try:
@@ -467,7 +509,8 @@ class ScaleByMinMax(TFTOperation):
       raise ValueError('max_value must be greater than min_value')
 
   def apply_transform(
-      self, data: tf.Tensor, output_column_name: str) -> tf.Tensor:
+      self, data: common_types.TensorType,
+      output_column_name: str) -> common_types.TensorType:
 
     output = tft.scale_by_min_max(
         x=data, output_min=self.min_value, output_max=self.max_value)
@@ -479,8 +522,10 @@ class NGrams(TFTOperation):
   def __init__(
       self,
       columns: List[str],
-      ngram_range: Tuple[int, int],
-      separator: str,
+      split_string_by_delimiter: Optional[str] = None,
+      *,
+      ngram_range: Tuple[int, int] = (1, 1),
+      ngrams_separator: Optional[str] = None,
       name: Optional[str] = None):
     """
     An n-gram is a contiguous sequence of n items from a given sample of text
@@ -490,20 +535,103 @@ class NGrams(TFTOperation):
 
     Args:
       columns: A list of column names to apply the transformation on.
+      split_string_by_delimiter: (Optional) A string that specifies the
+        delimiter to split the input strings before computing ngrams.
       ngram_range: A tuple of integers(inclusive) specifying the range of
         n-gram sizes.
-      separator: A string that specifies the separator between tokens.
+      ngrams_separator: A string that will be inserted between each ngram.
       name: A name for the operation (optional).
     """
     super().__init__(columns)
     self.ngram_range = ngram_range
-    self.separator = separator
+    self.ngrams_separator = ngrams_separator
     self.name = name
+    self.split_string_by_delimiter = split_string_by_delimiter
 
-  def apply_transform(self, data: tf.SparseTensor,
-                      output_column_name: str) -> Dict[str, tf.SparseTensor]:
-    # TODO: https://github.com/apache/beam/issues/27505
-    # When the input is passed as a string instead of list of strings,
-    # split the string using separator.
-    output = tft.ngrams(data, self.ngram_range, self.separator)
+    if ngram_range != (1, 1) and not ngrams_separator:
+      raise ValueError(
+          'ngrams_separator must be specified when ngram_range is not (1, 1)')
+
+  def apply_transform(
+      self, data: common_types.TensorType,
+      output_column_name: str) -> Dict[str, common_types.TensorType]:
+    if self.split_string_by_delimiter:
+      data = self._split_string_with_delimiter(
+          data, self.split_string_by_delimiter)
+    output = tft.ngrams(data, self.ngram_range, self.ngrams_separator)
     return {output_column_name: output}
+
+
+@register_input_dtype(str)
+class BagOfWords(TFTOperation):
+  def __init__(
+      self,
+      columns: List[str],
+      split_string_by_delimiter: Optional[str] = None,
+      *,
+      ngram_range: Tuple[int, int] = (1, 1),
+      ngrams_separator: Optional[str] = None,
+      compute_word_count: bool = False,
+      name: Optional[str] = None,
+  ):
+    """
+    Bag of words contains the unique words present in the input text.
+    This operation applies a bag of words transformation to specified
+    columns of incoming data. Also, the transformation accepts a Tuple of
+    integers specifying the range of n-gram sizes. The transformation
+    splits the input data into a set of consecutive n-grams if ngram_range
+    is specified. The n-grams are then converted to a bag of words.
+    Also, you can specify a seperator string that will be inserted between
+    each ngram.
+
+    Args:
+      columns: A list of column names to apply the transformation on.
+      split_string_by_delimiter: (Optional) A string that specifies the
+        delimiter to split the input strings before computing ngrams.
+      ngram_range: A tuple of integers(inclusive) specifying the range of
+        n-gram sizes.
+      seperator: A string that will be inserted between each ngram.
+      compute_word_count: A boolean that specifies whether to compute
+        the unique word count and add it as an artifact to the output.
+        Note that the count will be computed over the entire dataset so
+        it will be the same value for all inputs.
+      name: A name for the operation (optional).
+
+    Note that original order of the input may not be preserved.
+    """
+
+    self.columns = columns
+    self.ngram_range = ngram_range
+    self.ngrams_separator = ngrams_separator
+    self.name = name
+    self.split_string_by_delimiter = split_string_by_delimiter
+    if compute_word_count:
+      self.compute_word_count_fn = count_unqiue_words
+    else:
+      self.compute_word_count_fn = lambda *args, **kwargs: {}
+
+    if ngram_range != (1, 1) and not ngrams_separator:
+      raise ValueError(
+          'ngrams_separator must be specified when ngram_range is not (1, 1)')
+
+  def get_artifacts(self, data: tf.SparseTensor,
+                    col_name: str) -> Dict[str, tf.Tensor]:
+    return self.compute_word_count_fn(data, col_name)
+
+  def apply_transform(self, data: tf.SparseTensor, output_col_name: str):
+    if self.split_string_by_delimiter:
+      data = self._split_string_with_delimiter(
+          data, self.split_string_by_delimiter)
+    output = tft.bag_of_words(
+        data, self.ngram_range, self.ngrams_separator, self.name)
+    return {output_col_name: output}
+
+
+def count_unqiue_words(data: tf.SparseTensor,
+                       output_col_name: str) -> Dict[str, tf.Tensor]:
+  keys, count = tft.count_per_key(data)
+  shape = [tf.shape(data)[0], tf.shape(keys)[0]]
+  return {
+      output_col_name + '_unique_elements': tf.broadcast_to(keys, shape),
+      output_col_name + '_counts': tf.broadcast_to(count, shape)
+  }
