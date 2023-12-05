@@ -585,6 +585,12 @@ public class DataflowRunner extends PipelineRunner<DataflowPipelineJob> {
               new GroupIntoBatchesOverride.StreamingGroupIntoBatchesWithShardedKeyOverrideFactory(
                   this)));
 
+      overridesBuilder.add(
+        PTransformOverride.of(
+            PTransformMatchers.reshuffleWithRunnerDeterminedBuckets(),
+            new ReshuffleOverride.StreamingReshuffleWithRunnerDeterminedBucketsOverrideFactory(
+                this)));
+
       overridesBuilder
           .add(
               // Streaming Bounded Read is implemented in terms of Streaming Unbounded Read, and

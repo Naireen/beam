@@ -31,6 +31,8 @@ import org.apache.beam.sdk.values.WindowingStrategy;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.primitives.UnsignedInteger;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.joda.time.Duration;
+import java.nio.ByteBuffer;
+import java.util.UUID;
 
 /**
  * <b>For internal use only; no backwards compatibility guarantees.</b>
@@ -127,6 +129,42 @@ public class Reshuffle<K, V> extends PTransform<PCollection<KV<K, V>>, PCollecti
           .apply("Pair with random key", ParDo.of(new AssignShardFn<>(numBuckets)))
           .apply(Reshuffle.of())
           .apply(Values.create());
+    }
+  }
+
+  /** Implementation of {@link #WithRunnerDeterminedBuckets() with runner determined buckets }. */
+  public static class WithRunnerDeterminedBuckets<T> extends PTransform<PCollection<T>, PCollection<T>> {
+    private WithRunnerDeterminedBuckets() {}
+
+    // The number of buckets to shard into, which is determined by the runner.
+    // This is a performance optimization to prevent having
+    // unit sized bundles on the output. If unset, uses a random integer key.
+
+    @Override
+    public PCollection<T> expand(PCollection<T> input) {
+      return input
+          .apply("Pair with random key", ParDo.of(new AssignCustomShardFn<>())) // is a new sharding function needed?
+          .apply(Reshuffle.of())
+          .apply(Values.create());
+    }
+  }
+  
+
+  // this is the same as the groupintobatches override
+  public static class AssignCustomShardFn<T> extends DoFn<T, KV<byte[], T>> {
+    private static final UUID workerUuid = UUID.randomUUID();
+
+    public AssignCustomShardFn() {}
+
+    @ProcessElement
+    public void processElement(@Element T element, OutputReceiver<KV<byte[], T>> r) {
+      // This follows the GIBOverride sharding function.
+      long tid = Thread.currentThread().getId();
+      ByteBuffer buffer = ByteBuffer.allocate(3 * Long.BYTES);
+      buffer.putLong(workerUuid.getMostSignificantBits());
+      buffer.putLong(workerUuid.getLeastSignificantBits());
+      buffer.putLong(tid);
+      r.output(KV.of(buffer.array(), element));
     }
   }
 

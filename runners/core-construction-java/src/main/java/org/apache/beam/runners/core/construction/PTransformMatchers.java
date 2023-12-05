@@ -27,6 +27,7 @@ import org.apache.beam.sdk.runners.AppliedPTransform;
 import org.apache.beam.sdk.runners.PTransformMatcher;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.Flatten;
+import org.apache.beam.sdk.transforms.Reshuffle;
 import org.apache.beam.sdk.transforms.GroupIntoBatches;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
@@ -542,4 +543,29 @@ public class PTransformMatchers {
       return false;
     };
   }
+
+  /**
+   * A {@link PTransformMatcher} which matches {@link WithRunnerDeterminedBuckets} transform that allows
+   * shardable states.
+   */
+  public static PTransformMatcher reshuffleWithRunnerDeterminedBuckets() {
+    return new PTransformMatcher() {
+      @Override
+      public boolean matches(AppliedPTransform<?, ?, ?> application) {
+        return application.getTransform().getClass().equals(Reshuffle.WithRunnerDeterminedBuckets.class);
+      }
+
+      @Override
+      public boolean matchesDuringValidation(AppliedPTransform<?, ?, ?> application) {
+        return false;
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper("withRunnerDeterminedBuckets").toString();
+      }
+    };
+  }
+
+
 }
