@@ -63,6 +63,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.errors.SerializationException;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -222,7 +223,7 @@ abstract class ReadFromKafkaDoFn<K, V>
   private transient @Nullable Map<TopicPartition, KafkaLatestOffsetEstimator> offsetEstimatorCache;
 
   private transient @Nullable LoadingCache<TopicPartition, AverageRecordSize> avgRecordSize;
-  private static final long DEFAULT_KAFKA_POLL_TIMEOUT = 2L;
+  private static final long DEFAULT_KAFKA_POLL_TIMEOUT = 10L;
 
   private HashMap<String, Long> perPartitionBacklogMetrics = new HashMap<String, Long>();;
 
@@ -256,7 +257,9 @@ abstract class ReadFromKafkaDoFn<K, V>
           Suppliers.memoizeWithExpiration(
               () -> {
                 synchronized (offsetConsumer) {
+                  LOG.warn("xxx before compute backlog");
                   ConsumerSpEL.evaluateSeek2End(offsetConsumer, topicPartition);
+                  LOG.warn("xxx after compute backlog");
                   return offsetConsumer.position(topicPartition);
                 }
               },
@@ -269,6 +272,7 @@ abstract class ReadFromKafkaDoFn<K, V>
       try {
         Closeables.close(offsetConsumer, true);
         closed = true;
+        // can we track this somewhere to close partition earlier instead of relyingon error?
         LOG.info("Offset Estimator consumer was closed for {}", topicPartition);
       } catch (Exception anyException) {
         LOG.warn("Failed to close offset consumer for {}", topicPartition);
@@ -353,7 +357,11 @@ abstract class ReadFromKafkaDoFn<K, V>
       }
     }
 
-    return avgRecordSize.get(kafkaSourceDescriptor.getTopicPartition()).getTotalSize(numRecords);
+    LOG.warn("xxx before compute size");
+    double currSize =
+        avgRecordSize.get(kafkaSourceDescriptor.getTopicPartition()).getTotalSize(numRecords);
+    LOG.warn("xxx after compute size");
+    return currSize;
   }
 
   @NewTracker
@@ -375,12 +383,13 @@ abstract class ReadFromKafkaDoFn<K, V>
       Map<String, Object> updatedConsumerConfig =
           overrideBootstrapServersConfig(consumerConfig, kafkaSourceDescriptor);
 
-      LOG.info("Creating Kafka consumer for offset estimation for {}", topicPartition);
+      LOG.warn("xxx Creating Kafka consumer for offset estimation for {}", topicPartition);
 
       Consumer<byte[], byte[]> offsetConsumer =
           consumerFactoryFn.apply(
               KafkaIOUtils.getOffsetConsumerConfig(
                   "tracker-" + topicPartition, offsetConsumerConfig, updatedConsumerConfig));
+      LOG.warn("xxx created estimator");
       offsetEstimator = new KafkaLatestOffsetEstimator(offsetConsumer, topicPartition);
       offsetEstimatorCacheInstance.put(topicPartition, offsetEstimator);
     }
@@ -436,19 +445,8 @@ abstract class ReadFromKafkaDoFn<K, V>
         "Creating Kafka consumer for process continuation for {}",
         kafkaSourceDescriptor.getTopicPartition());
     try (Consumer<byte[], byte[]> consumer = consumerFactoryFn.apply(updatedConsumerConfig)) {
-      // Check whether current TopicPartition is still available to read.
-      Set<TopicPartition> existingTopicPartitions = new HashSet<>();
-      for (List<PartitionInfo> topicPartitionList : consumer.listTopics().values()) {
-        topicPartitionList.forEach(
-            partitionInfo -> {
-              existingTopicPartitions.add(
-                  new TopicPartition(partitionInfo.topic(), partitionInfo.partition()));
-            });
-      }
-      if (!existingTopicPartitions.contains(kafkaSourceDescriptor.getTopicPartition())) {
-        return ProcessContinuation.stop();
-      }
 
+      // what errors if topic is deleted?
       ConsumerSpEL.evaluateAssign(
           consumer, ImmutableList.of(kafkaSourceDescriptor.getTopicPartition()));
       long startOffset = tracker.currentRestriction().getFrom();
@@ -458,12 +456,47 @@ abstract class ReadFromKafkaDoFn<K, V>
       ConsumerRecords<byte[], byte[]> rawRecords = ConsumerRecords.empty();
 
       while (true) {
-        rawRecords = poll(consumer, kafkaSourceDescriptor.getTopicPartition());
+        // should fail once topic is deleted
+        try {
+          LOG.warn("xxx before we poll");
+          rawRecords = poll(consumer, kafkaSourceDescriptor.getTopicPartition());
+          LOG.warn("xxx after we poll");
+        } catch (InvalidTopicException exception) {
+          LOG.warn(
+              "Topic {} no longer exists, will stop polling for it",
+              kafkaSourceDescriptor.getTopicPartition().toString());
+          return ProcessContinuation.stop();
+        }
         // When there are no records available for the current TopicPartition, self-checkpoint
         // and move to process the next element.
         if (rawRecords.isEmpty()) {
+          LOG.warn("xxx no records");
           if (timestampPolicy != null) {
             updateWatermarkManually(timestampPolicy, watermarkEstimator, tracker);
+          }
+          // If this is empty, only then check if we should pass a continueation stop if there are
+          // no records, otherwise resume.
+          // Check whether current TopicPartition is still available to read.
+          Set<TopicPartition> existingTopicPartitions = new HashSet<>();
+          for (List<PartitionInfo> topicPartitionList : consumer.listTopics().values()) {
+            topicPartitionList.forEach(
+                partitionInfo -> {
+                  existingTopicPartitions.add(
+                      new TopicPartition(partitionInfo.topic(), partitionInfo.partition()));
+                });
+          }
+          // does this check work?
+          LOG.info("xxx existingTopicPartition size " + existingTopicPartition.size());
+          for ( TopicPartition existingTopicPartition : existingTopicPartitions) {
+              LOG.info("xxx existingTopicPartition " + existingTopicPartition.toString());
+          } 
+            LOG.info("xxx kafkaSourceDescriptor.getTopicPartition()  " + kafkaSourceDescriptor.getTopicPartition());
+          // for ( TopicPartition existingTopicPartition : existingTopicPartitions) {
+          //     LOG.info("xxx existingTopicPartition " + existingTopicPartition.toString());
+          // }
+          if (!existingTopicPartitions.contains(kafkaSourceDescriptor.getTopicPartition())) {
+            LOG.warn("topic no longer exists, stop polling for it");
+            return ProcessContinuation.stop();
           }
           return ProcessContinuation.resume();
         }
@@ -529,8 +562,16 @@ abstract class ReadFromKafkaDoFn<K, V>
     long previousPosition = -1;
     java.time.Duration elapsed = java.time.Duration.ZERO;
     java.time.Duration timeout = java.time.Duration.ofSeconds(this.consumerPollingTimeout);
+    ConsumerRecords<byte[], byte[]> rawRecords;
     while (true) {
-      final ConsumerRecords<byte[], byte[]> rawRecords = consumer.poll(timeout.minus(elapsed));
+      // this should faile if it doesn't exist
+      try {
+        rawRecords = consumer.poll(timeout.minus(elapsed));
+      } catch (Exception exception) {
+        LOG.warn("exception logs: {}", exception.getMessage());
+        LOG.warn("Topic {} no longer exists, will stop polling for it", topicPartition.topic());
+        throw exception;
+      }
       if (!rawRecords.isEmpty()) {
         // return as we have found some entries
         return rawRecords;
