@@ -40,6 +40,7 @@ import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.Immuta
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.primitives.UnsignedInteger;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.joda.time.Duration;
+import org.apache.beam.sdk.transforms.display.DisplayData;
 
 /**
  * A family of {@link PTransform PTransforms} that returns a {@link PCollection} equivalent to its
@@ -162,6 +163,17 @@ public class Redistribute {
           .apply(Redistribute.<Integer, T>byKey().withAllowDuplicates(this.allowDuplicates))
           .apply(Values.create());
     }
+
+    @Override
+    public void populateDisplayData(DisplayData.Builder builder) {
+      super.populateDisplayData(builder);
+      builder.add(
+        DisplayData.item("allowDuplicates", String.valueOf(getAllowDuplicates())).withLabel("Allow Duplicates"));
+        if (numBuckets!= null){
+          builder.add(
+          DisplayData.item("numBuckets", String.valueOf(this.numBuckets)).withLabel("Number of Buckets"));
+        }
+    }
   }
 
   private static class RestoreMetadata<K, V>
@@ -219,6 +231,15 @@ public class Redistribute {
         hashOfShard = UnsignedInteger.fromIntBits(hashOfShard).mod(unsignedNumBuckets).intValue();
       }
       r.output(KV.of(hashOfShard, element));
+    }
+
+    @Override
+    public void populateDisplayData(DisplayData.Builder builder) {
+      super.populateDisplayData(builder);
+        if (numBuckets!= null){
+          builder.add(
+          DisplayData.item("numBuckets", String.valueOf(this.numBuckets)).withLabel("Number of Buckets"));
+        }
     }
   }
 

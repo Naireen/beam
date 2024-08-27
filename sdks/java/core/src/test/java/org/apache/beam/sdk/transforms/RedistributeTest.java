@@ -21,6 +21,7 @@ import static org.apache.beam.sdk.TestUtils.KvMatcher.isKv;
 import static org.apache.beam.sdk.util.construction.PTransformTranslation.REDISTRIBUTE_ARBITRARILY_URN;
 import static org.apache.beam.sdk.util.construction.PTransformTranslation.REDISTRIBUTE_BY_KEY_URN;
 import static org.apache.beam.sdk.values.TypeDescriptors.integers;
+import static org.apache.beam.sdk.transforms.display.DisplayDataMatchers.hasDisplayItem;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
@@ -62,6 +63,8 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.apache.beam.sdk.transforms.PTransform;
+import org.apache.beam.sdk.transforms.display.DisplayData;
 
 /** Tests for {@link Redistribute}. */
 @RunWith(JUnit4.class)
@@ -407,4 +410,28 @@ public class RedistributeTest implements Serializable {
         PTransformTranslation.urnForTransform(Redistribute.arbitrarily()),
         equalTo(REDISTRIBUTE_ARBITRARILY_URN));
   }
+
+
+  @Test
+  public void testDisplayData() {
+    // Test transform
+    PTransform redistribute = Redistribute.arbitrarily();
+    DisplayData displayData = DisplayData.from(redistribute);
+    assertThat(displayData, hasDisplayItem("allowDuplicates", "false"));
+
+    redistribute = Redistribute.arbitrarily().withAllowDuplicates(true);
+    displayData = DisplayData.from(redistribute);
+    assertThat(displayData, hasDisplayItem("allowDuplicates", "true"));
+
+    redistribute = Redistribute.arbitrarily().withAllowDuplicates(true).withNumBuckets(20);
+    displayData = DisplayData.from(redistribute);
+    assertThat(displayData, hasDisplayItem("allowDuplicates", "true"));
+    assertThat(displayData, hasDisplayItem("numBuckets", "20"));
+
+    redistribute = Redistribute.arbitrarily().withAllowDuplicates(false).withNumBuckets(10);
+    displayData = DisplayData.from(redistribute);
+    assertThat(displayData, hasDisplayItem("allowDuplicates", "false"));
+    assertThat(displayData, hasDisplayItem("numBuckets", "10"));
+  }
+
 }
