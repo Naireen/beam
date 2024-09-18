@@ -591,7 +591,7 @@ class KafkaUnboundedReader<K, V> extends UnboundedReader<KafkaRecord<K, V>> {
             java.time.Instant operationEndTime = java.time.Instant.now();
 
             kafkaResults.updateSuccessfulRpcMetrics(
-                topicName, operationStartTime, operationEndTime);
+                topicName, operationStartTime, operationEndTime, KafkaSinkMetrics.RpcMethod.POLL);
 
           } else if (availableRecordsQueue.offer(
               records, RECORDS_ENQUEUE_POLL_TIMEOUT.getMillis(), TimeUnit.MILLISECONDS)) {
@@ -711,7 +711,13 @@ class KafkaUnboundedReader<K, V> extends UnboundedReader<KafkaRecord<K, V>> {
     for (PartitionState<K, V> p : partitionStates) {
       try {
         Instant fetchTime = Instant.now();
+        java.time.Instant fetchStartTime = new DateTime( fetchTime.toEpochMilli() );
         ConsumerSpEL.evaluateSeek2End(offsetConsumer, p.topicPartition);
+        java.time.Instant fetchCompletionTime = java.time.Instant.now();
+
+        kafkaResults.updateSuccessfulRpcMetrics(
+            p.topicPartition.topic(), fetchTime, fetchCompletionTime, KafkaSinkMetrics.RpcMethod.BACKLOG_POLL);
+
         long offset = offsetConsumer.position(p.topicPartition);
         p.setLatestOffset(offset, fetchTime);
       } catch (Exception e) {

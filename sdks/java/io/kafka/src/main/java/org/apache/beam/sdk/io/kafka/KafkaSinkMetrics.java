@@ -44,6 +44,7 @@ public class KafkaSinkMetrics {
   // Kafka Consumer Method names
   enum RpcMethod {
     POLL,
+    BACKLOG_POLL,
   }
 
   // Metric labels

@@ -30,7 +30,7 @@ import org.apache.beam.sdk.util.Preconditions;
 /** Stores and exports metrics for a batch of Kafka Client RPCs. */
 public interface KafkaMetrics {
 
-  void updateSuccessfulRpcMetrics(String topic, Instant start, Instant end);
+  void updateSuccessfulRpcMetrics(String topic, Instant start, Instant end, KafkaSinkMetrics.RpcMethod method);
 
   void updateKafkaMetrics();
 
@@ -39,7 +39,7 @@ public interface KafkaMetrics {
     private NoOpKafkaMetrics() {}
 
     @Override
-    public void updateSuccessfulRpcMetrics(String topic, Instant start, Instant end) {}
+    public void updateSuccessfulRpcMetrics(String topic, Instant start, Instant end, KafkaSinkMetrics.RpcMethod method) {}
 
     @Override
     public void updateKafkaMetrics() {}
@@ -64,26 +64,48 @@ public interface KafkaMetrics {
   @AutoValue
   abstract class KafkaMetricsImpl implements KafkaMetrics {
 
-    static HashMap<String, Histogram> latencyHistograms = new HashMap<String, Histogram>();
+    // Needs to be a nested map of method to topic to hist
+    static HashMap<String, HashMap<String, Histogram>> latencyHistograms =
+        new HashMap<String, HashMap<String, Histogram>>();
 
-    abstract HashMap<String, ConcurrentLinkedQueue<Duration>> perTopicRpcLatencies();
+    abstract HashMap<String, HashMap<String, ConcurrentLinkedQueue<Duration>>>
+        perTopicRpcLatencies();
 
     abstract AtomicBoolean isWritable();
 
     public static KafkaMetricsImpl create() {
-      return new AutoValue_KafkaMetrics_KafkaMetricsImpl(
-          new HashMap<String, ConcurrentLinkedQueue<Duration>>(), new AtomicBoolean(true));
+
+      // Create a nested initial hash map with the keys created
+      HashMap<String, ConcurrentLinkedQueue<Duration>> pollLatencyList =
+          new HashMap<String, ConcurrentLinkedQueue<Duration>>();
+      HashMap<String, ConcurrentLinkedQueue<Duration>> backlogLatencyList =
+          new HashMap<String, ConcurrentLinkedQueue<Duration>>();
+      HashMap<String, HashMap<String, ConcurrentLinkedQueue<Duration>>> latencies =
+          new HashMap<String, HashMap<String, ConcurrentLinkedQueue<Duration>>>();
+      latencies.put(KafkaSinkMetrics.RpcMethod.POLL.toString(), pollLatencyList);
+      latencies.put(KafkaSinkMetrics.RpcMethod.BACKLOG_POLL.toString(), backlogLatencyList);
+
+      // Initialize histograms
+      latencyHistograms.put(
+          KafkaSinkMetrics.RpcMethod.POLL.toString(), new HashMap<String, Histogram>());
+      latencyHistograms.put(
+          KafkaSinkMetrics.RpcMethod.BACKLOG_POLL.toString(), new HashMap<String, Histogram>());
+
+      return new AutoValue_KafkaMetrics_KafkaMetricsImpl(latencies, new AtomicBoolean(true));
     }
 
     /** Record the rpc status and latency of a successful Kafka poll RPC call. */
     @Override
-    public void updateSuccessfulRpcMetrics(String topic, Instant start, Instant end) {
+    public void updateSuccessfulRpcMetrics(
+        String topic, Instant start, Instant end, KafkaSinkMetrics.RpcMethod method) {
+      //  KafkaSinkMetrics.RpcMethod.POLL
       if (isWritable().get()) {
-        ConcurrentLinkedQueue<Duration> latencies = perTopicRpcLatencies().get(topic);
+        // First get can't return null.
+        ConcurrentLinkedQueue<Duration> latencies = perTopicRpcLatencies().get(method).get(topic);
         if (latencies == null) {
           latencies = new ConcurrentLinkedQueue<Duration>();
           latencies.add(Duration.between(start, end));
-          perTopicRpcLatencies().put(topic, latencies);
+          perTopicRpcLatencies().get(method).put(topic, latencies);
         } else {
           latencies.add(Duration.between(start, end));
         }
@@ -92,21 +114,25 @@ public interface KafkaMetrics {
 
     /** Record rpc latency histogram metrics for all recorded topics. */
     private void recordRpcLatencyMetrics() {
-      for (Map.Entry<String, ConcurrentLinkedQueue<Duration>> topicLatencies :
-          perTopicRpcLatencies().entrySet()) {
-        Histogram topicHistogram;
-        if (latencyHistograms.containsKey(topicLatencies.getKey())) {
-          topicHistogram = latencyHistograms.get(topicLatencies.getKey());
-        } else {
-          topicHistogram =
-              KafkaSinkMetrics.createRPCLatencyHistogram(
-                  KafkaSinkMetrics.RpcMethod.POLL, topicLatencies.getKey());
-          latencyHistograms.put(topicLatencies.getKey(), topicHistogram);
-        }
-        // update all the latencies
-        for (Duration d : topicLatencies.getValue()) {
-          Preconditions.checkArgumentNotNull(topicHistogram);
-          topicHistogram.update(d.toMillis());
+      // iterate over twice.
+      for (Map.Entry<String, HashMap<String, ConcurrentLinkedQueue<Duration>>> methodLatencies :
+          perTopicRpcLatencies()) {
+          String method = methodLatencies.getKey();
+        for (Map.Entry<String, ConcurrentLinkedQueue<Duration>> topicLatencies :
+            methodLatencies.entrySet()) {
+          Histogram topicHistogram;
+          if (latencyHistograms.get(method).containsKey(topicLatencies.getKey())) {
+            topicHistogram = latencyHistograms.get(topicLatencies.getKey());
+          } else {
+            topicHistogram =
+                KafkaSinkMetrics.createRPCLatencyHistogram(method, topicLatencies.getKey());
+            latencyHistograms.get(method).put(topicLatencies.getKey(), topicHistogram);
+          }
+          // update all the latencies
+          for (Duration d : topicLatencies.getValue()) {
+            Preconditions.checkArgumentNotNull(topicHistogram);
+            topicHistogram.update(d.toMillis());
+          }
         }
       }
     }
