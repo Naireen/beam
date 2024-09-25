@@ -60,7 +60,7 @@ public class HistogramData implements Serializable {
   /**
    * Create a histogram.
    *
-   * @param bucketType a bucket type for a new histogram instance.
+   * @param bucketType a bucket type for a new histogram instance. does all of this need to be sent?
    */
   public HistogramData(BucketType bucketType) {
     this.bucketType = bucketType;
@@ -266,6 +266,19 @@ public class HistogramData implements Serializable {
 
   public synchronized long getTotalCount() {
     return numBoundedBucketRecords + numTopRecords + numBottomRecords;
+  }
+
+  public HistogramData combine(HistogramData value) {
+    // reutrn new hist for now, ignore the old, though this is incorrect. 
+    
+    return value;
+  }
+
+  // same as HistogramData, but doesn't reset
+  public HistogramData extractResult() {
+    HistogramData other = new HistogramData(this.getBucketType());
+    other.update(this);
+    return other;
   }
 
   public synchronized String getPercentileString(String elemType, String unit) {
