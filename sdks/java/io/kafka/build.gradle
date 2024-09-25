@@ -55,6 +55,7 @@ dependencies {
   permitUnusedDeclared library.java.jackson_dataformat_csv
   implementation project(path: ":sdks:java:core", configuration: "shadow")
   implementation project(":sdks:java:extensions:avro")
+  implementation project(":runners:core-java") // for metrics
   implementation project(":sdks:java:extensions:protobuf")
   implementation project(":sdks:java:expansion-service")
   permitUnusedDeclared project(":sdks:java:expansion-service") // BEAM-11761

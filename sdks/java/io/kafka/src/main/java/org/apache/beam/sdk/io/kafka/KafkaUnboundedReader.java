@@ -729,7 +729,7 @@ class KafkaUnboundedReader<K, V> extends UnboundedReader<KafkaRecord<K, V>> {
       }
     }
 
-    LOG.debug("{}:  backlog {}", this, getSplitBacklogBytes());
+    LOG.info("{}:  backlog {}", this, getSplitBacklogBytes());
   }
 
   private void reportBacklog() {

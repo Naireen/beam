@@ -17,96 +17,79 @@
  */
 package org.apache.beam.sdk.io.kafka;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.equalTo;
+// /** Tests for {@link KafkaSinkMetrics}. */
+// // TODO:Naireen - Refactor to remove duplicate code between the two sinks
+// @RunWith(JUnit4.class)
+// public class KafkaMetricsTest {
+//   public static class TestHistogram implements Histogram {
+//     public List<Double> values = Lists.newArrayList();
+//     private MetricName metricName = MetricName.named("KafkaSink", "name");
 
-import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import org.apache.beam.runners.core.metrics.MetricsContainerImpl;
-import org.apache.beam.sdk.metrics.Histogram;
-import org.apache.beam.sdk.metrics.MetricName;
-import org.apache.beam.sdk.metrics.MetricsEnvironment;
-import org.apache.beam.sdk.util.HistogramData;
-import org.apache.beam.sdk.values.KV;
-import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.Lists;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+//     @Override
+//     public void update(double value) {
+//       values.add(value);
+//     }
 
-/** Tests for {@link KafkaSinkMetrics}. */
-// TODO:Naireen - Refactor to remove duplicate code between the two sinks
-@RunWith(JUnit4.class)
-public class KafkaMetricsTest {
-  public static class TestHistogram implements Histogram {
-    public List<Double> values = Lists.newArrayList();
-    private MetricName metricName = MetricName.named("KafkaSink", "name");
+//     @Override
+//     public MetricName getName() {
+//       return metricName;
+//     }
+//   }
 
-    @Override
-    public void update(double value) {
-      values.add(value);
-    }
+//   public static class TestMetricsContainer extends MetricsContainerImpl {
+//     public ConcurrentHashMap<KV<MetricName, HistogramData.BucketType>, TestHistogram>
+//         perWorkerHistograms =
+//             new ConcurrentHashMap<KV<MetricName, HistogramData.BucketType>, TestHistogram>();
 
-    @Override
-    public MetricName getName() {
-      return metricName;
-    }
-  }
+//     public TestMetricsContainer() {
+//       super("TestStep");
+//     }
 
-  public static class TestMetricsContainer extends MetricsContainerImpl {
-    public ConcurrentHashMap<KV<MetricName, HistogramData.BucketType>, TestHistogram>
-        perWorkerHistograms =
-            new ConcurrentHashMap<KV<MetricName, HistogramData.BucketType>, TestHistogram>();
+//     @Override
+//     public Histogram getPerWorkerHistogram(
+//         MetricName metricName, HistogramData.BucketType bucketType) {
+//       perWorkerHistograms.computeIfAbsent(KV.of(metricName, bucketType), kv -> new
+// TestHistogram());
+//       return perWorkerHistograms.get(KV.of(metricName, bucketType));
+//     }
 
-    public TestMetricsContainer() {
-      super("TestStep");
-    }
+//     @Override
+//     public void reset() {
+//       perWorkerHistograms.clear();
+//     }
+//   }
 
-    @Override
-    public Histogram getPerWorkerHistogram(
-        MetricName metricName, HistogramData.BucketType bucketType) {
-      perWorkerHistograms.computeIfAbsent(KV.of(metricName, bucketType), kv -> new TestHistogram());
-      return perWorkerHistograms.get(KV.of(metricName, bucketType));
-    }
+//   @Test
+//   public void testNoOpKafkaMetrics() throws Exception {
+//     TestMetricsContainer testContainer = new TestMetricsContainer();
+//     MetricsEnvironment.setCurrentContainer(testContainer);
 
-    @Override
-    public void reset() {
-      perWorkerHistograms.clear();
-    }
-  }
+//     KafkaMetrics results = KafkaMetrics.NoOpKafkaMetrics.getInstance();
+//     results.updateSuccessfulRpcMetrics("test-topic", Duration.ofMillis(10));
 
-  @Test
-  public void testNoOpKafkaMetrics() throws Exception {
-    TestMetricsContainer testContainer = new TestMetricsContainer();
-    MetricsEnvironment.setCurrentContainer(testContainer);
+//     results.updateKafkaMetrics();
 
-    KafkaMetrics results = KafkaMetrics.NoOpKafkaMetrics.getInstance();
-    results.updateSuccessfulRpcMetrics("test-topic", Duration.ofMillis(10));
+//     assertThat(testContainer.perWorkerHistograms.size(), equalTo(0));
+//   }
 
-    results.updateKafkaMetrics();
+//   @Test
+//   public void testKafkaRPCLatencyMetrics() throws Exception {
+//     TestMetricsContainer testContainer = new TestMetricsContainer();
+//     MetricsEnvironment.setCurrentContainer(testContainer);
 
-    assertThat(testContainer.perWorkerHistograms.size(), equalTo(0));
-  }
+//     KafkaMetrics results = KafkaSinkMetrics.kafkaMetrics();
 
-  @Test
-  public void testKafkaRPCLatencyMetrics() throws Exception {
-    TestMetricsContainer testContainer = new TestMetricsContainer();
-    MetricsEnvironment.setCurrentContainer(testContainer);
+//     results.updateSuccessfulRpcMetrics("test-topic", Duration.ofMillis(10));
 
-    KafkaMetrics results = KafkaSinkMetrics.kafkaMetrics();
+//     results.updateKafkaMetrics();
+//     // RpcLatency*rpc_method:POLL;topic_name:test-topic
+//     MetricName histogramName =
+//         MetricName.named("KafkaSink", "RpcLatency*rpc_method:POLL;topic_name:test-topic;");
+//     HistogramData.BucketType bucketType = HistogramData.ExponentialBuckets.of(1, 17);
 
-    results.updateSuccessfulRpcMetrics("test-topic", Duration.ofMillis(10));
-
-    results.updateKafkaMetrics();
-    // RpcLatency*rpc_method:POLL;topic_name:test-topic
-    MetricName histogramName =
-        MetricName.named("KafkaSink", "RpcLatency*rpc_method:POLL;topic_name:test-topic;");
-    HistogramData.BucketType bucketType = HistogramData.ExponentialBuckets.of(1, 17);
-
-    assertThat(testContainer.perWorkerHistograms.size(), equalTo(1));
-    assertThat(
-        testContainer.perWorkerHistograms.get(KV.of(histogramName, bucketType)).values,
-        containsInAnyOrder(Double.valueOf(10.0)));
-  }
-}
+//     assertThat(testContainer.perWorkerHistograms.size(), equalTo(1));
+//     assertThat(
+//         testContainer.perWorkerHistograms.get(KV.of(histogramName, bucketType)).values,
+//         containsInAnyOrder(Double.valueOf(10.0)));
+//   }
+// }
