@@ -71,12 +71,12 @@ public interface MetricsContainer extends Serializable {
    * Return the {@link Histogram} that should be used for implementing the given per-worker {@code
    * metricName} in this container.
    */
-  Histogram getPerWorkerHistogram(
-      MetricName metricName, HistogramData.BucketType bucketType) ;
-  // default Histogram getPerWorkerHistogram(
-  //     MetricName metricName, HistogramData.BucketType bucketType) {
-  //   return NoOpHistogram.getInstance();
-  // }
+  // Histogram getPerWorkerHistogram(
+  //     MetricName metricName, HistogramData.BucketType bucketType) ;
+  default Histogram getPerWorkerHistogram(
+      MetricName metricName, HistogramData.BucketType bucketType) {
+    return NoOpHistogram.getInstance();
+  }
 
 
   /** Return the cumulative values for any metrics in this container as MonitoringInfos. */

@@ -32,6 +32,8 @@ import org.slf4j.LoggerFactory;
 import org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram.BucketOptions;
 import org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram.BucketOptions.Base2Exponent;
 import org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram.BucketOptions.Linear;
+import com.google.api.services.dataflow.model.DataflowHistogramValue;
+import java.lang.reflect.Method;
 
 /**
  * A histogram that supports estimated percentile with linear interpolation.
@@ -118,6 +120,54 @@ public class HistogramData implements Serializable {
     LOG.info("xxx numBoundedBucketRecords when creating from proto {}", numBoundedBucketRecords);
   }
 
+  public HistogramData(com.google.api.services.dataflow.model.DataflowHistogramValue histogramProto) {
+    // this.bucketType = ExponentialBuckets.of(2, 2);
+    // this.buckets = new long[bucketType.getNumBuckets()];
+    this.numBoundedBucketRecords = 0;
+    this.numTopRecords = 0;
+    this.topRecordsSum = 0;
+    this.numBottomRecords = 0;
+    this.bottomRecordsSum = 0;
+    this.mean = 0;
+    this.sumOfSquaredDeviations = 0;
+
+    int numBuckets;
+    if(histogramProto.getBucketOptions().getLinear() != null){
+      double start = histogramProto.getBucketOptions().getLinear().getStart();
+      double width = histogramProto.getBucketOptions().getLinear().getWidth();
+      numBuckets = histogramProto.getBucketOptions().getLinear().getNumberOfBuckets();
+      this.bucketType = LinearBuckets.of(start, width, numBuckets);
+      int idx = 0;
+
+      this.buckets = new long[bucketType.getNumBuckets()];
+      // populate with bucket counts with mean type for now, not used to determine equality
+      for (long val: histogramProto.getBucketCounts()){
+        this.buckets[idx] = val; // is this valid?
+        if (!(idx == 0 || idx == bucketType.getNumBuckets()-1  )){
+          LOG.info("xxx {} {}", val, idx);
+          this.numBoundedBucketRecords+= val;
+        }
+        idx++;
+      }
+      // update with counts
+    } else {
+      // assume exp, add handling for wrong type later
+      int scale = histogramProto.getBucketOptions().getExponential().getScale();
+      numBuckets = histogramProto.getBucketOptions().getExponential().getNumberOfBuckets();
+      int idx = 0;
+      
+      this.bucketType = ExponentialBuckets.of(scale, numBuckets);
+      this.buckets = new long[bucketType.getNumBuckets()];
+      // populate with bucket counts with mean type for now, not used to determine equality
+      for (long val: histogramProto.getBucketCounts()){
+        this.buckets[idx] = val; // is this valid?
+        if (!(idx == 0 || idx == bucketType.getNumBuckets()-1  )){
+          this.numBoundedBucketRecords+= val;
+        }
+        idx++;
+      }
+    }
+  }
 
   public BucketType getBucketType() {
     return this.bucketType;
@@ -349,6 +399,10 @@ public class HistogramData implements Serializable {
    */
   public synchronized long getCount(int bucketIndex) {
     return buckets[bucketIndex];
+  }
+
+  public synchronized long[] getBucketCount() {
+    return buckets;
   }
 
   public synchronized long getTopBucketCount() {
@@ -631,8 +685,6 @@ public class HistogramData implements Serializable {
     public double getRangeTo() {
       return getStart() + getNumBuckets() * getWidth();
     }
-
-    // Note: equals() and hashCode() are implemented by the AutoValue.
   }
 
   @Override
@@ -643,6 +695,7 @@ public class HistogramData implements Serializable {
       LOG.info("xxx {}", numTopRecords == other.numTopRecords);
       LOG.info("xxx {}", numBottomRecords == other.numBottomRecords);
       LOG.info("xxx {}", Arrays.equals(buckets, other.buckets));
+      LOG.info("xxx {}, {}", buckets, other.buckets);
 
       synchronized (other) {
         return Objects.equals(bucketType, other.bucketType)
