@@ -48,7 +48,6 @@ public class MonitoringInfoEncodingsTest {
   public void testInt64DistributionEncoding() {
     DistributionData data = DistributionData.create(1L, 2L, 3L, 4L);
     ByteString payload = encodeInt64Distribution(data);
-    System.out.println("xxxx " + payload);
     assertEquals(data, decodeInt64Distribution(payload));
   }
 
@@ -64,15 +63,30 @@ public class MonitoringInfoEncodingsTest {
   }
 
   @Test
-  public void testHistgramInt64Encoding() {
+  public void testHistgramInt64EncodingLinearHist() {
     HistogramData.BucketType buckets = HistogramData.LinearBuckets.of(0, 5, 5);
 
     HistogramData inputHistogram = new HistogramData(buckets);
     inputHistogram.record(5, 10, 15, 20);
     // LOG.info("Xxx: inputHistogram {}, {} ", inputHistogram.getBoun, payload);
     ByteString payload = encodeInt64Histogram(inputHistogram);
+    System.out.println("xxx payload: " + payload);
+
+    // com.google.api.services.dataflow.model.DataflowHistogramValue histogramProto=  new
+    // com.google.api.services.dataflow.model.DataflowHistogramValue();
     // HistogramData data = inputHistogram.extractResult();
     // System.out.println("xxx data {}" + data);
+    assertEquals(inputHistogram, decodeInt64Histogram(payload));
+  }
+
+  @Test
+  public void testHistgramInt64EncodingExpHist() {
+    HistogramData.BucketType buckets = HistogramData.ExponentialBuckets.of(1, 10);
+
+    HistogramData inputHistogram = new HistogramData(buckets);
+    inputHistogram.record(2, 4, 8, 16, 32);
+    ByteString payload = encodeInt64Histogram(inputHistogram);
+    System.out.println("xxx payload: " + payload);
     assertEquals(inputHistogram, decodeInt64Histogram(payload));
   }
 

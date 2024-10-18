@@ -29,15 +29,17 @@ import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.math.IntMath;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram.BucketOptions;
-import org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram.BucketOptions.Base2Exponent;
-import org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram.BucketOptions.Linear;
+// import org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram.BucketOptions;
+// import org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram.BucketOptions.Base2Exponent;
+// import org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram.BucketOptions.Linear;
+import com.google.api.services.dataflow.model.DataflowHistogramValue;
+import java.lang.reflect.Method;
 
 /**
  * A histogram that supports estimated percentile with linear interpolation.
  *
  * <p>We may consider using Apache Commons or HdrHistogram library in the future for advanced
- * features such as sparsely populated histograms.
+* features such as sparsely populated histograms.
  */
 public class HistogramData implements Serializable {
   private static final Logger LOG = LoggerFactory.getLogger(HistogramData.class);
@@ -77,10 +79,10 @@ public class HistogramData implements Serializable {
     this.sumOfSquaredDeviations = 0;
   }
 
-  public HistogramData(org.apache.beam.runners.dataflow.worker.windmill.Windmill.Histogram histogramProto) {
-    // HistogramData newHist = null;
+  public HistogramData(com.google.api.services.dataflow.model.DataflowHistogramValue histogramProto) {
+
     int numBuckets;
-    if(histogramProto.getBucketOptions().hasLinear()){
+    if(histogramProto.getBucketOptions().getLinear() != null){
       double start = histogramProto.getBucketOptions().getLinear().getStart();
       double width = histogramProto.getBucketOptions().getLinear().getWidth();
       numBuckets = histogramProto.getBucketOptions().getLinear().getNumberOfBuckets();
@@ -89,10 +91,10 @@ public class HistogramData implements Serializable {
 
       this.buckets = new long[bucketType.getNumBuckets()];
       // populate with bucket counts with mean type for now, not used to determine equality
-      for (long val: histogramProto.getBucketCountsList()){
+      for (long val: histogramProto.getBucketCounts()){
         this.buckets[idx] = val; // is this valid?
         if (!(idx == 0 || idx == bucketType.getNumBuckets()-1  )){
-          LOG.info("xxx {} {}", val, idx);
+          // LOG.info("xxx val, idx {} {}", val, idx);
           this.numBoundedBucketRecords+= val;
         }
         idx++;
@@ -107,7 +109,7 @@ public class HistogramData implements Serializable {
       this.bucketType = ExponentialBuckets.of(scale, numBuckets);
       this.buckets = new long[bucketType.getNumBuckets()];
       // populate with bucket counts with mean type for now, not used to determine equality
-      for (long val: histogramProto.getBucketCountsList()){
+      for (long val: histogramProto.getBucketCounts()){
         this.buckets[idx] = val; // is this valid?
         if (!(idx == 0 || idx == bucketType.getNumBuckets()-1  )){
           this.numBoundedBucketRecords+= val;
@@ -115,9 +117,7 @@ public class HistogramData implements Serializable {
         idx++;
       }
     }
-    LOG.info("xxx numBoundedBucketRecords when creating from proto {}", numBoundedBucketRecords);
   }
-
 
   public BucketType getBucketType() {
     return this.bucketType;
@@ -224,6 +224,7 @@ public class HistogramData implements Serializable {
   }
 
   public synchronized void incTopBucketCount(long count) {
+    LOG.info("xxx increment top bucket {}", count);
     this.numTopRecords += count;
   }
 
@@ -258,6 +259,7 @@ public class HistogramData implements Serializable {
     double rangeTo = bucketType.getRangeTo();
     double rangeFrom = bucketType.getRangeFrom();
     if (value >= rangeTo) {
+      // LOG.info("xxx value, rangeTo {}, {}", value, rangeTo);
       recordTopRecordsValue(value);
     } else if (value < rangeFrom) {
       recordBottomRecordsValue(value);
@@ -296,6 +298,7 @@ public class HistogramData implements Serializable {
    *
    * @param value
    */
+  // out of bounds values
   private synchronized void recordTopRecordsValue(double value) {
     numTopRecords++;
     topRecordsSum += value;
@@ -349,6 +352,10 @@ public class HistogramData implements Serializable {
    */
   public synchronized long getCount(int bucketIndex) {
     return buckets[bucketIndex];
+  }
+
+  public synchronized long[] getBucketCount() {
+    return buckets;
   }
 
   public synchronized long getTopBucketCount() {
@@ -468,6 +475,7 @@ public class HistogramData implements Serializable {
     @Memoized
     @Override
     public double getRangeTo() {
+      // LOG.info("xxx {}, {}, range {}, {}", getBase(), getNumBuckets(),  Math.pow(getBase(), getNumBuckets()), getScale());
       return Math.pow(getBase(), getNumBuckets());
     }
 
@@ -631,8 +639,6 @@ public class HistogramData implements Serializable {
     public double getRangeTo() {
       return getStart() + getNumBuckets() * getWidth();
     }
-
-    // Note: equals() and hashCode() are implemented by the AutoValue.
   }
 
   @Override
@@ -640,9 +646,10 @@ public class HistogramData implements Serializable {
     if (object instanceof HistogramData) {
       HistogramData other = (HistogramData) object;
       LOG.info("xxx {}, {}, {}", numBoundedBucketRecords == other.numBoundedBucketRecords, numBoundedBucketRecords, other.numBoundedBucketRecords);
-      LOG.info("xxx {}", numTopRecords == other.numTopRecords);
+      LOG.info("xxx {}, {}, {}", numTopRecords == other.numTopRecords, numTopRecords, other.numTopRecords);
       LOG.info("xxx {}", numBottomRecords == other.numBottomRecords);
       LOG.info("xxx {}", Arrays.equals(buckets, other.buckets));
+      LOG.info("xxx {}, {}", buckets, other.buckets);
 
       synchronized (other) {
         return Objects.equals(bucketType, other.bucketType)
