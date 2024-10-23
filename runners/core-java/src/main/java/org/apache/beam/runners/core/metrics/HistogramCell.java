@@ -38,6 +38,7 @@ public class HistogramCell
   private final DirtyState dirty = new DirtyState();
   private final HistogramData value;
   private final MetricName name;
+      // create per worker check here?
 
   /**
    * Generally, runners should construct instances using the methods in {@link

@@ -21,8 +21,13 @@ import com.google.auto.value.AutoValue;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.beam.sdk.metrics.Gauge;
 import org.apache.beam.sdk.metrics.Histogram;
 import org.apache.beam.sdk.util.Preconditions;
 import org.slf4j.Logger;
@@ -35,7 +40,11 @@ public interface KafkaMetrics {
 
   void recordRpcLatencyMetric(String topic, Duration duration);
 
+  void updatePartitionBacklogStats(Integer partition, String topic, long backlog);
+
   void updateKafkaMetrics();
+
+  void recordPartitionBacklog(Integer partition, String topic, long backlog);
 
   /** No-op implementation of {@code KafkaResults}. */
   class NoOpKafkaMetrics implements KafkaMetrics {
@@ -49,6 +58,12 @@ public interface KafkaMetrics {
 
     @Override
     public void updateKafkaMetrics() {}
+
+    @Override
+    public void updatePartitionBacklogStats(Integer partition, String topic, long backlog) {}
+
+    @Override
+    public void recordPartitionBacklog(Integer partition, String topic, long backlog) {}
 
     private static NoOpKafkaMetrics singleton = new NoOpKafkaMetrics();
 
@@ -74,6 +89,13 @@ public interface KafkaMetrics {
 
     static HashMap<String, Histogram> latencyHistograms = new HashMap<String, Histogram>();
 
+    // Keyed by topic and partition
+    // Pair<Integer, String> simplePair = new Pair<>(42, "Second");
+    // create gauge in correct thread only, otherwise just store longs
+    static HashMap<ImmutablePair<Integer, String>, Long> partitionBacklogs = new HashMap<ImmutablePair<Integer, String>, Long>();
+    static HashMap<ImmutablePair<Integer, String>, Gauge> partitionBacklogGauges = new HashMap<ImmutablePair<Integer, String>, Gauge>();
+
+
     abstract HashMap<String, ConcurrentLinkedQueue<Duration>> perTopicRpcLatencies();
 
     abstract AtomicBoolean isWritable();
@@ -88,7 +110,6 @@ public interface KafkaMetrics {
     /** Record the rpc status and latency of a successful Kafka poll RPC call. */
     @Override
     public void updateSuccessfulRpcMetrics(String topic, Duration elapsedTime) {
-      // LOG.info("xxx update metrics");
       if (isWritable().get()) {
         ConcurrentLinkedQueue<Duration> latencies = perTopicRpcLatencies().get(topic);
         if (latencies == null) {
@@ -99,6 +120,21 @@ public interface KafkaMetrics {
           latencies.add(elapsedTime);
         }
       }
+    }
+
+    @Override
+    public void updatePartitionBacklogStats(Integer partition, String topic, long backlog) {
+      // Gauge partitionBacklog;
+      if (isWritable().get()) {
+        ImmutablePair<Integer, String> simplePair = new ImmutablePair<>(partition, topic);
+        // always overwrite old value;
+        partitionBacklogs.put(simplePair, backlog);
+        LOG.info("xxx {}, {}", partition, topic);
+              // KafkaSinkMetrics.createBacklogGauge(
+              //   partition, topic, /*processWideContainer*/ false); // should this be false?
+              //   partitionBacklogs.put(topic, partitionBacklog);
+        LOG.info("xxx update backlog value {}", backlog);
+     }
     }
 
     /** Record rpc latency histogram metrics for all recorded topics. */
@@ -136,6 +172,23 @@ public interface KafkaMetrics {
       topicHistogram.update(duration.toMillis());
     }
 
+   @Override
+   public void recordPartitionBacklog(Integer partition, String topic, long backlog) {
+      LOG.info("xxx create backlog gauge counter");
+      ImmutablePair<Integer, String> simplePair = new ImmutablePair<>(partition, topic);
+      // partitionBacklogs.put(simplePair, backlog);
+        Gauge partitionBacklogGauge;
+        if (partitionBacklogGauges.containsKey(simplePair)) {
+          partitionBacklogGauge = partitionBacklogGauges.get(simplePair);
+        } else {
+          partitionBacklogGauge =
+          KafkaSinkMetrics.createBacklogGauge(
+            partition, topic, /*processWideContainer*/ false); // should this be false?
+        }
+        partitionBacklogGauge.set(backlog);
+        LOG.info("xxx gauge {} {}", partitionBacklogGauge, backlog);
+    }
+
     /**
      * Export all metrics recorded in this instance to the underlying {@code perWorkerMetrics}
      * containers. This function will only report metrics once per instance. Subsequent calls to
@@ -147,7 +200,9 @@ public interface KafkaMetrics {
         LOG.warn("Updating stale Kafka metrics container");
         return;
       }
+      LOG.info("xxx start recording metrics");
       recordRpcLatencyMetrics();
+      // recordPartitionBacklog();
     }
   }
 }

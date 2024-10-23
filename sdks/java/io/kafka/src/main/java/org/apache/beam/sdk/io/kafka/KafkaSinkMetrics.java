@@ -17,13 +17,17 @@
  */
 package org.apache.beam.sdk.io.kafka;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.beam.sdk.metrics.DelegatingHistogram;
+import org.apache.beam.sdk.metrics.DelegatingGauge;
 import org.apache.beam.sdk.metrics.Histogram;
+import org.apache.beam.sdk.metrics.Gauge;
 import org.apache.beam.sdk.metrics.LabeledMetricNameUtils;
 import org.apache.beam.sdk.metrics.MetricName;
 import org.apache.beam.sdk.util.HistogramData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 
 /**
  * Helper class to create per worker metrics for Kafka Sink stages.
@@ -53,11 +57,20 @@ public class KafkaSinkMetrics {
   // Metric labels
   private static final String TOPIC_LABEL = "topic_name";
   private static final String RPC_METHOD = "rpc_method";
+  private static final String PARTITION = "partition"; // use a mock backlog numner
 
-  private static MetricName createMetricName(RpcMethod method, String topic) {
+  private static MetricName createRPCMetricName(RpcMethod method, String topic) {
     LabeledMetricNameUtils.MetricNameBuilder nameBuilder =
         LabeledMetricNameUtils.MetricNameBuilder.baseNameBuilder(RPC_LATENCY);
     nameBuilder.addLabel(RPC_METHOD, method.toString());
+    nameBuilder.addLabel(TOPIC_LABEL, topic);
+    return nameBuilder.build(METRICS_NAMESPACE);
+  }
+
+  private static MetricName createBacklogMetricName(Integer partition, String topic) {
+    LabeledMetricNameUtils.MetricNameBuilder nameBuilder =
+        LabeledMetricNameUtils.MetricNameBuilder.baseNameBuilder(RPC_LATENCY);
+    nameBuilder.addLabel(PARTITION, partition.toString());
     nameBuilder.addLabel(TOPIC_LABEL, topic);
     return nameBuilder.build(METRICS_NAMESPACE);
   }
@@ -73,17 +86,23 @@ public class KafkaSinkMetrics {
    */
   public static Histogram createRPCLatencyHistogram(
       RpcMethod method, String topic, boolean processWideContainer) {
-    MetricName metricName = createMetricName(method, topic);
+    MetricName metricName = createRPCMetricName(method, topic);
     HistogramData.BucketType buckets = HistogramData.ExponentialBuckets.of(1, 17);
     LOG.info("xxx create histogram metrics  " + metricName.getName());
     return new DelegatingHistogram(metricName, buckets, processWideContainer, true);
   }
 
   public static Histogram createRPCLatencyHistogram(RpcMethod method, String topic) {
-    MetricName metricName = createMetricName(method, topic);
+    MetricName metricName = createRPCMetricName(method, topic);
     HistogramData.BucketType buckets = HistogramData.ExponentialBuckets.of(1, 17);
     LOG.info("xxx create histogram metrics in current container" + metricName.getName());
     return new DelegatingHistogram(metricName, buckets, false, true);
+  }
+
+  public static Gauge createBacklogGauge(Integer partition, String topic,  boolean processWideContainer) {
+    MetricName metricName = createBacklogMetricName(partition, topic);
+    LOG.info("xxx create gauge metrics not in current container" + metricName.getName());
+    return new DelegatingGauge(metricName, false, processWideContainer);
   }
 
   /**

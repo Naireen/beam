@@ -417,7 +417,12 @@ abstract class ReadFromKafkaDoFn<K, V>
       Gauge backlog =
           Metrics.gauge(
               METRIC_NAMESPACE, RAW_SIZE_METRIC_PREFIX + "backlogBytes_" + backlogSplit.getKey());
-      backlog.set(backlogSplit.getValue());
+        // set value here for per partition
+        Preconditions.checkStateNotNull(kafkaResults);
+        // directly create the metric
+        kafkaResults.recordPartitionBacklog(
+          kafkaSourceDescriptor.getTopicPartition().partition(), kafkaSourceDescriptor.getTopicPartition().topic(), backlogSplit.getValue());
+        backlog.set(backlogSplit.getValue());
     }
 
     // Stop processing current TopicPartition when it's time to stop.

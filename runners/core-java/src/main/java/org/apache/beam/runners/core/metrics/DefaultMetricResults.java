@@ -45,6 +45,7 @@ public class DefaultMetricResults extends MetricResults {
   private final Iterable<MetricResult<Long>> counters;
   private final Iterable<MetricResult<DistributionResult>> distributions;
   private final Iterable<MetricResult<GaugeResult>> gauges;
+  private final Iterable<MetricResult<GaugeResult>> perWorkerGauges;
   private final Iterable<MetricResult<StringSetResult>> stringSets;
   private final Iterable<MetricResult<HistogramData>> perWorkerHistograms;
 
@@ -52,12 +53,14 @@ public class DefaultMetricResults extends MetricResults {
       Iterable<MetricResult<Long>> counters,
       Iterable<MetricResult<DistributionResult>> distributions,
       Iterable<MetricResult<GaugeResult>> gauges,
+      Iterable<MetricResult<GaugeResult>> perWorkerGauges,
       Iterable<MetricResult<StringSetResult>> stringSets,
       Iterable<MetricResult<HistogramData>> perWorkerHistograms) {
     LOG.info("xxx does this get here? DefaultMetricResults ");
     this.counters = counters;
     this.distributions = distributions;
     this.gauges = gauges;
+    this.perWorkerGauges = perWorkerGauges;
     this.stringSets = stringSets;
     this.perWorkerHistograms = perWorkerHistograms;
   }
@@ -69,6 +72,7 @@ public class DefaultMetricResults extends MetricResults {
         Iterables.filter(
             distributions, distribution -> MetricFiltering.matches(filter, distribution.getKey())),
         Iterables.filter(gauges, gauge -> MetricFiltering.matches(filter, gauge.getKey())),
+        Iterables.filter(perWorkerGauges, gauge -> MetricFiltering.matches(filter, gauge.getKey())),
         Iterables.filter(
             stringSets, stringSets -> MetricFiltering.matches(filter, stringSets.getKey())),
         Iterables.filter(

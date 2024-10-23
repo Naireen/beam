@@ -230,6 +230,9 @@ class KafkaUnboundedReader<K, V> extends UnboundedReader<KafkaRecord<K, V>> {
 
         for (Map.Entry<String, Long> backlogSplit : perPartitionBacklogMetrics.entrySet()) {
           backlogBytesOfSplit.set(backlogSplit.getValue());
+                // is the metric set here?backlogBytesOfSplit likely not correct 
+          //   kafkaResults.updatePartitionBacklog(
+          // rawRecord.partition(), rawRecord.topic(), backlogSplit.getValue());
         }
 
         // Pass metrics to container.

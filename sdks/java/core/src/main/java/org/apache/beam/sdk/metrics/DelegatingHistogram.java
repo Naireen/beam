@@ -21,8 +21,8 @@ import java.io.Serializable;
 import java.util.Optional;
 import org.apache.beam.sdk.annotations.Internal;
 import org.apache.beam.sdk.util.HistogramData;
-// import org.slf4j.Logger;
-// import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.beam.sdk.util.Preconditions;
 
 /** Implementation of {@link Histogram} that delegates to the instance for the current context. */
@@ -33,7 +33,7 @@ public class DelegatingHistogram implements Metric, Histogram, Serializable {
   private final boolean processWideContainer;
   private final boolean perWorkerHistogram;
 
-  // private static final Logger LOG = LoggerFactory.getLogger(DelegatingHistogram.class);
+  private static final Logger LOG = LoggerFactory.getLogger(DelegatingHistogram.class);
 
   /**
    * Create a {@code DelegatingHistogram} with {@code perWorkerHistogram} set to false.
@@ -112,5 +112,10 @@ public class DelegatingHistogram implements Metric, Histogram, Serializable {
   @Override
   public MetricName getName() {
     return name;
+  }
+
+  public boolean isPerWorker(){
+    LOG.info("get is per worker");
+    return perWorkerHistogram;
   }
 }

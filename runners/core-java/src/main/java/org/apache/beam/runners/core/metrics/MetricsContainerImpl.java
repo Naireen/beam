@@ -20,8 +20,10 @@ package org.apache.beam.runners.core.metrics;
 import static org.apache.beam.runners.core.metrics.MonitoringInfoConstants.TypeUrns.DISTRIBUTION_INT64_TYPE;
 import static org.apache.beam.runners.core.metrics.MonitoringInfoConstants.TypeUrns.LATEST_INT64_TYPE;
 import static org.apache.beam.runners.core.metrics.MonitoringInfoConstants.TypeUrns.PER_WORKER_HISTOGRAM_TYPE;
+import static org.apache.beam.runners.core.metrics.MonitoringInfoConstants.TypeUrns.PER_WORKER_HISTOGRAM_TYPE;
 import static org.apache.beam.runners.core.metrics.MonitoringInfoConstants.TypeUrns.SET_STRING_TYPE;
 import static org.apache.beam.runners.core.metrics.MonitoringInfoConstants.TypeUrns.SUM_INT64_TYPE;
+
 import static org.apache.beam.runners.core.metrics.MonitoringInfoEncodings.decodeInt64Counter;
 import static org.apache.beam.runners.core.metrics.MonitoringInfoEncodings.decodeInt64Distribution;
 import static org.apache.beam.runners.core.metrics.MonitoringInfoEncodings.decodeInt64Gauge;
@@ -46,6 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import org.apache.beam.model.pipeline.v1.MetricsApi.MonitoringInfo;
 import org.apache.beam.runners.core.metrics.MetricUpdates.MetricUpdate;
+import org.apache.beam.sdk.metrics.DelegatingHistogram;
 import org.apache.beam.sdk.metrics.Distribution;
 import org.apache.beam.sdk.metrics.Histogram;
 import org.apache.beam.sdk.metrics.Metric;
@@ -92,11 +95,8 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
 
   private MetricsMap<MetricName, GaugeCell> gauges = new MetricsMap<>(GaugeCell::new);
 
-  // Should it be a cell Instead?
-  // Can this be a regular histogram instead of a cell'? see
-  // dirty state acts as being lock free, commits only non dirty metrics.
-  // also of type DISTRIBUTION_INT64_TYPE
-  // refactor to use Lock free histograms? later?
+  private MetricsMap<MetricName, GaugeCell> perWorkerGauges = new MetricsMap<>(GaugeCell::new);
+
   private MetricsMap<KV<MetricName, HistogramData.BucketType>, HistogramCell> perWorkerHistograms =
       new MetricsMap<>(HistogramCell::new);
 
@@ -144,6 +144,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     counters.forEachValue(CounterCell::reset);
     distributions.forEachValue(DistributionCell::reset);
     gauges.forEachValue(GaugeCell::reset);
+    perWorkerGauges.forEachValue(GaugeCell::reset);
     histograms.forEachValue(HistogramCell::reset);
     stringSets.forEachValue(StringSetCell::reset);
   }
@@ -182,13 +183,6 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
   @Override
   public HistogramCell getPerWorkerHistogram(
       MetricName metricName, HistogramData.BucketType bucketType) {
-    // LOG.info("xxx stepName {}, getPerWorkerHistogram metric {}", stepName, metricName.getName());
-    // if not enabled, return a no op container from parent class
-    // if (!enablePerWorkerMetrics) {
-    //   // will be a no op
-    //   return null;
-    //   // return MetricsContainer.super.getPerWorkerHistogram(metricName, bucketType);
-    // }
     // return no op histogram instead
     HistogramCell val = perWorkerHistograms.get(KV.of(metricName, bucketType));
     return val; // no null chceks for the others
@@ -212,7 +206,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
   }
 
   public MetricsMap<KV<MetricName, HistogramData.BucketType>, HistogramCell>
-      getPerWorkerHistogram() {
+      getPerWorkerHistograms() {
     return perWorkerHistograms;
   }
 
@@ -238,6 +232,13 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     LOG.info("xxx stepName {}, gauge metric {}", stepName, metricName.getName());
     return gauges.get(metricName);
   }
+
+  @Override
+  public GaugeCell getPerWorkerGauge(MetricName metricName) {
+    LOG.info("xxx stepName {}, gauge metric {}", stepName, metricName.getName());
+    return perWorkerGauges.get(metricName);
+  }
+
 
   /**
    * Return a {@code HistogramCell} named {@code metricName}. If it doesn't exist, return {@code
@@ -311,16 +312,19 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
         extractUpdates(counters),
         extractUpdates(distributions),
         extractUpdates(gauges),
+        extractUpdates(perWorkerGauges),
         extractUpdates(stringSets),
         extractHistogramUpdates(perWorkerHistograms) /* */);
   }
 
+  // why is this returning null?
   /** @return The MonitoringInfo metadata from the metric. */
   private @Nullable SimpleMonitoringInfoBuilder metricToMonitoringMetadata(
       MetricKey metricKey, String typeUrn, String userUrn) {
     LOG.info(
-        "xxx metricToMonitoringMetadata urn {}, metrics key {} step name {}",
+        "xxx metricToMonitoringMetadata typeUrn {}, user urn {} metrics key {} step name {}",
         typeUrn,
+        userUrn,
         metricKey.metricName().getName(),
         metricKey.stepName());
     SimpleMonitoringInfoBuilder builder = new SimpleMonitoringInfoBuilder(true);
@@ -332,16 +336,18 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
       LOG.info("xxx metric name is instance of MonitoringInfoMetricName {}", metricName.getName());
       MonitoringInfoMetricName monitoringInfoName = (MonitoringInfoMetricName) metricName;
       // Represents a specific MonitoringInfo for a specific URN.
+      LOG.info("xxx monitoringInfoName {}", monitoringInfoName.toString());
+
       builder.setUrn(monitoringInfoName.getUrn());
       for (Entry<String, String> e : monitoringInfoName.getLabels().entrySet()) {
         builder.setLabel(e.getKey(), e.getValue());
       }
     } else { // Represents a user counter.
-      // LOG.info("xxx metric name is a user counter {}", metricName.getName());
+      LOG.info("xxx metric name is a user counter {}", metricName.getName());
       // Drop if the stepname is not set. All user counters must be
       // defined for a PTransform. They must be defined on a container bound to a step.
       if (this.stepName == null) {
-        // LOG.info("xxx dropping {} since step name is null",  metricName.getName());
+        LOG.info("xxx dropping {} since step name is null",  metricName.getName());
         return null;
       }
       builder
@@ -404,7 +410,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
 
   /**
    * @param metricUpdate
-   * @return The MonitoringInfo generated from the histogram metricUpdate.
+   * @return The MonitoringInfo generated from the histogram metricUpdate. // check if per worker or not
    */
   private @Nullable MonitoringInfo histogramUpdateToMonitoringInfo(
       MetricUpdate<HistogramData> metricUpdate) {
@@ -428,6 +434,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
    * @param metricUpdate
    * @return The MonitoringInfo generated from the distribution metricUpdate.
    */
+  // make this per worker? specific?
   private @Nullable MonitoringInfo gaugeUpdateToMonitoringInfo(
       MetricUpdate<GaugeData> metricUpdate) {
     SimpleMonitoringInfoBuilder builder = gaugeToMonitoringMetadata(metricUpdate.getKey());
@@ -523,8 +530,6 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
           if (distributionCell.getDirty().beforeCommit()) {
             String shortId =
                 getShortId(metricName, this::distributionToMonitoringMetadata, shortIds);
-            // LOG.info("xxx does metricName for distributions? {}", metricName.getName()); // add
-            // per worker metrics here?
             if (shortId != null) {
               builder.put(shortId, encodeInt64Distribution(distributionCell.getCumulative()));
             }
@@ -536,7 +541,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
         (metricName, histogramCell) -> {
           if (histogramCell.getDirty().beforeCommit()) {
             LOG.info(
-                "xxx does metricName for perWorkerHist? {}",
+                "xxx does metricName for hist? {}",
                 metricName.getKey().getName()); // add per worker metrics here?
             String shortId =
                 getShortId(metricName.getKey(), this::histogramToMonitoringMetadata, shortIds);
@@ -576,11 +581,14 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     if (shortId == null) {
       SimpleMonitoringInfoBuilder monitoringInfoBuilder =
           toInfo.apply(MetricKey.create(stepName, metricName));
+          LOG.info("xxx monitoringInfoBuilder {}", monitoringInfoBuilder.toString());
       if (monitoringInfoBuilder == null) {
+        LOG.info("xxx monitoringInfoBuilder is null return no short id");
         shortId = Optional.empty();
       } else {
         MonitoringInfo monitoringInfo = monitoringInfoBuilder.build();
         if (monitoringInfo == null) {
+          LOG.info("xxx monitoringInfo is null return no short id");
           shortId = Optional.empty();
         } else {
           shortId = Optional.of(shortIds.getOrCreateShortId(monitoringInfo));
@@ -641,6 +649,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
         extractCumulatives(counters),
         extractCumulatives(distributions),
         extractCumulatives(gauges),
+        extractCumulatives(perWorkerGauges),
         extractCumulatives(stringSets),
         extractHistogramCumulatives(perWorkerHistograms));
   }
@@ -650,6 +659,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     updateCounters(counters, other.counters);
     updateDistributions(distributions, other.distributions);
     updateGauges(gauges, other.gauges);
+    updateGauges(perWorkerGauges, other.perWorkerGauges);
     updateStringSets(stringSets, other.stringSets);
     updateHistograms(histograms, other.histograms);
   }
@@ -719,8 +729,9 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
           updateForStringSetType(monitoringInfo);
           break;
 
-          // Per worker histogram , de mangle metrics in backend?
+          // Per worker histogram , de mangle metrics in backend? update case 
         case PER_WORKER_HISTOGRAM_TYPE:
+          LOG.info("xxx here");
           updateForPerWorkerHistogramInt64(monitoringInfo);
           break;
 

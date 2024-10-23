@@ -36,6 +36,7 @@ public abstract class MetricUpdates {
           Collections.emptyList(),
           Collections.emptyList(),
           Collections.emptyList(),
+          Collections.emptyList(),
           Collections.emptyList());
 
   /**
@@ -65,6 +66,9 @@ public abstract class MetricUpdates {
   /** All the gauges updates. */
   public abstract Iterable<MetricUpdate<GaugeData>> gaugeUpdates();
 
+  /** All the gauges updates. */
+  public abstract Iterable<MetricUpdate<GaugeData>> perWorkerGaugeUpdates();
+
   /** All the sets updates. */
   public abstract Iterable<MetricUpdate<StringSetData>> stringSetUpdates();
 
@@ -75,7 +79,8 @@ public abstract class MetricUpdates {
   public static MetricUpdates create(
       Iterable<MetricUpdate<Long>> counterUpdates,
       Iterable<MetricUpdate<DistributionData>> distributionUpdates,
-      Iterable<MetricUpdate<GaugeData>> gaugeUpdates,
+      Iterable<MetricUpdate<GaugeData>> gaugeUpdates, // ideally combine this with perworker metrics
+      Iterable<MetricUpdate<GaugeData>> perWorkerGaugeUpdates, 
       Iterable<MetricUpdate<StringSetData>> stringSetUpdates,
       Iterable<MetricUpdate<HistogramData>> perWorkerHistogramsUpdates) {
     // System.out.println("xxx metric create");
@@ -83,6 +88,7 @@ public abstract class MetricUpdates {
         counterUpdates,
         distributionUpdates,
         gaugeUpdates,
+        perWorkerGaugeUpdates,
         stringSetUpdates,
         perWorkerHistogramsUpdates);
   }
@@ -93,6 +99,7 @@ public abstract class MetricUpdates {
         && Iterables.isEmpty(distributionUpdates())
         && Iterables.isEmpty(perWorkerHistogramsUpdates())
         && Iterables.isEmpty(gaugeUpdates())
+        && Iterables.isEmpty(perWorkerGaugeUpdates())
         && Iterables.isEmpty(stringSetUpdates());
   }
 }

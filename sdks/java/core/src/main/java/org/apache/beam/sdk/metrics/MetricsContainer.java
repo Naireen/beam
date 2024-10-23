@@ -53,6 +53,10 @@ public interface MetricsContainer extends Serializable {
    */
   Gauge getGauge(MetricName metricName);
 
+  default Gauge getPerWorkerGauge(MetricName metricName) {
+    return NoOpGauge.getInstance();
+  };
+
   /**
    * Return the {@link StringSet} that should be used for implementing the given {@code metricName}
    * in this container.
@@ -73,11 +77,7 @@ public interface MetricsContainer extends Serializable {
    */
   Histogram getPerWorkerHistogram(
       MetricName metricName, HistogramData.BucketType bucketType) ;
-  // default Histogram getPerWorkerHistogram(
-  //     MetricName metricName, HistogramData.BucketType bucketType) {
-  //   return NoOpHistogram.getInstance();
-  // }
-
+ 
 
   /** Return the cumulative values for any metrics in this container as MonitoringInfos. */
   default Iterable<MetricsApi.MonitoringInfo> getMonitoringInfos() {

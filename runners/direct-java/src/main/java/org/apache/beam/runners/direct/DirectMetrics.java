@@ -246,6 +246,8 @@ class DirectMetrics extends MetricResults {
       distributions;
 
   private final MetricsMap<MetricKey, DirectMetric<GaugeData, GaugeResult>> gauges;
+  private final MetricsMap<MetricKey, DirectMetric<GaugeData, GaugeResult>> perWorkerGauges;
+
   private final MetricsMap<MetricKey, DirectMetric<StringSetData, StringSetResult>> stringSet;
 
   DirectMetrics(ExecutorService executorService) {
@@ -253,6 +255,7 @@ class DirectMetrics extends MetricResults {
     this.distributions =
         new MetricsMap<>(unusedKey -> new DirectMetric<>(DISTRIBUTION, executorService));
     this.gauges = new MetricsMap<>(unusedKey -> new DirectMetric<>(GAUGE, executorService));
+    this.perWorkerGauges = new MetricsMap<>(unusedKey -> new DirectMetric<>(GAUGE, executorService));
     this.stringSet = new MetricsMap<>(unusedKey -> new DirectMetric<>(STRING_SET, executorService));
   }
 
@@ -272,6 +275,10 @@ class DirectMetrics extends MetricResults {
     for (Entry<MetricKey, DirectMetric<GaugeData, GaugeResult>> gauge : gauges.entries()) {
       maybeExtractResult(filter, gaugeResults, gauge);
     }
+    ImmutableList.Builder<MetricResult<GaugeResult>> perWorkerGaugesResults = ImmutableList.builder();
+    for (Entry<MetricKey, DirectMetric<GaugeData, GaugeResult>> gauge : perWorkerGauges.entries()) {
+      maybeExtractResult(filter, perWorkerGaugesResults, gauge);
+    }
 
     ImmutableList.Builder<MetricResult<StringSetResult>> stringSetResult = ImmutableList.builder();
     for (Entry<MetricKey, DirectMetric<StringSetData, StringSetResult>> stringSet :
@@ -283,6 +290,7 @@ class DirectMetrics extends MetricResults {
         counterResults.build(),
         distributionResults.build(),
         gaugeResults.build(),
+        perWorkerGaugesResults.build(),
         stringSetResult.build());
   }
 

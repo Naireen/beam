@@ -140,20 +140,21 @@ public class MetricsContainerStepMap implements Serializable {
     Map<MetricKey, MetricResult<Long>> counters = new HashMap<>();
     Map<MetricKey, MetricResult<DistributionData>> distributions = new HashMap<>();
     Map<MetricKey, MetricResult<GaugeData>> gauges = new HashMap<>();
+    Map<MetricKey, MetricResult<GaugeData>> perWorkerGauges = new HashMap<>();
     Map<MetricKey, MetricResult<StringSetData>> sets = new HashMap<>();
     Map<MetricKey, MetricResult<HistogramData>> perWorkerHistograms = new HashMap<>();
-    // LOG.info("xxx asMetricresults");
     attemptedMetricsContainers.forEachMetricContainer(
         container -> {
           LOG.info(
               "xxx asMetricResults {} per worker histogram size {}",
               container.stepName,
-              container.getPerWorkerHistogram().size());
+              container.getPerWorkerHistograms().size());
           MetricUpdates cumulative = container.getCumulative();
           mergeAttemptedResults(counters, cumulative.counterUpdates(), (l, r) -> l + r);
           mergeAttemptedResults(
               distributions, cumulative.distributionUpdates(), DistributionData::combine);
           mergeAttemptedResults(gauges, cumulative.gaugeUpdates(), GaugeData::combine);
+          mergeAttemptedResults(perWorkerGauges, cumulative.perWorkerGaugeUpdates(), GaugeData::combine);
           mergeAttemptedResults(sets, cumulative.stringSetUpdates(), StringSetData::combine);
           mergeAttemptedResults(
               perWorkerHistograms, cumulative.perWorkerHistogramsUpdates(), HistogramData::combine);
@@ -163,7 +164,7 @@ public class MetricsContainerStepMap implements Serializable {
           LOG.info(
               "xxx asMetricResults {} per worker histogram size {}",
               container.stepName,
-              container.getPerWorkerHistogram().size());
+              container.getPerWorkerHistograms().size());
           MetricUpdates cumulative = container.getCumulative();
           mergeCommittedResults(counters, cumulative.counterUpdates(), (l, r) -> l + r);
           mergeCommittedResults(
@@ -185,6 +186,9 @@ public class MetricsContainerStepMap implements Serializable {
         gauges.values().stream()
             .map(result -> result.transform(GaugeData::extractResult))
             .collect(toList()),
+        perWorkerGauges.values().stream()
+            .map(result -> result.transform(GaugeData::extractResult))
+            .collect(toList()),
         sets.values().stream()
             .map(result -> result.transform(StringSetData::extractResult))
             .collect(toList()),
@@ -202,7 +206,7 @@ public class MetricsContainerStepMap implements Serializable {
           LOG.info(
               "xxx get getMonitoringInfos {} per worker histogram size {}",
               container.stepName,
-              container.getPerWorkerHistogram().size());
+              container.getPerWorkerHistograms().size());
           for (MonitoringInfo mi : container.getMonitoringInfos()) {
             LOG.info("xxx monitoring info {}", mi.toString());
             monitoringInfos.add(mi);
@@ -221,10 +225,10 @@ public class MetricsContainerStepMap implements Serializable {
           LOG.info(
               "xxx get getMonitoringData {} per worker histogram size {}, distribution size {}",
               container.stepName,
-              container.getPerWorkerHistogram().size(),
+              container.getPerWorkerHistograms().size(),
               container.distributions().size());
           container
-              .getPerWorkerHistogram()
+              .getPerWorkerHistograms()
               .forEach((histogram, data) -> LOG.info("xxx {}", histogram.getKey().getName()));
         });
     forEachMetricContainer((container) -> builder.putAll(container.getMonitoringData(shortIds)));

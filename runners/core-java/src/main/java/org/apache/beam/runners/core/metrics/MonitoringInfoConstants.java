@@ -54,6 +54,7 @@ public final class MonitoringInfoConstants {
         extractUrn(MonitoringInfoSpecs.Enum.USER_DISTRIBUTION_DOUBLE);
     public static final String USER_SET_STRING =
         extractUrn(MonitoringInfoSpecs.Enum.USER_SET_STRING);
+        // should ne just USER_histogram?
     public static final String USER_PER_WORKER_HISTOGRAM =
         extractUrn(MonitoringInfoSpecs.Enum.USER_PER_WORKER_HISTOGRAM);
     public static final String SAMPLED_BYTE_SIZE =
@@ -66,7 +67,8 @@ public final class MonitoringInfoConstants {
         extractUrn(MonitoringInfoSpecs.Enum.API_REQUEST_COUNT);
     public static final String API_REQUEST_LATENCIES =
         extractUrn(MonitoringInfoSpecs.Enum.API_REQUEST_LATENCIES);
-
+    public static final String PER_WORKER_METRIC =
+        extractUrn(MonitoringInfoSpecs.Enum.PER_WORKER_METRIC);
     static {
       // Validate that compile time constants match the values stored in the protos.
       // Defining these as constants allows for usage in switch case statements and also

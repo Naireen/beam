@@ -150,6 +150,8 @@ public class SimpleMonitoringInfoBuilder {
     return this;
   }
 
+  // set urn as per worker type? and type as counter or hist type?
+
   /**
    * Encodes the value and sets the type to {@link
    * MonitoringInfoConstants.TypeUrns#DISTRIBUTION_INT64_TYPE}.

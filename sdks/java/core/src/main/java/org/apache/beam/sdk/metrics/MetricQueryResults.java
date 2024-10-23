@@ -37,6 +37,8 @@ public abstract class MetricQueryResults {
   /** Return the metric results for the gauges that matched the filter. */
   public abstract Iterable<MetricResult<GaugeResult>> getGauges();
 
+  public abstract Iterable<MetricResult<GaugeResult>> getPerWorkerGauges();
+
   /** Return the metric results for the sets that matched the filter. */
   public abstract Iterable<MetricResult<StringSetResult>> getStringSets();
 
@@ -71,6 +73,7 @@ public abstract class MetricQueryResults {
     printMetrics("Counters", getCounters(), sb);
     printMetrics("Distributions", getDistributions(), sb);
     printMetrics("Gauges", getGauges(), sb);
+    printMetrics("PerWorkerGauges", getPerWorkerGauges(), sb);
     printMetrics("StringSets", getStringSets(), sb);
     printMetrics("perWorkerHistograms", getPerWorkerHistograms(), sb);
     sb.append(")");
@@ -81,16 +84,18 @@ public abstract class MetricQueryResults {
       Iterable<MetricResult<Long>> counters,
       Iterable<MetricResult<DistributionResult>> distributions,
       Iterable<MetricResult<GaugeResult>> gauges,
+      Iterable<MetricResult<GaugeResult>> perWorkerGauges,
       Iterable<MetricResult<StringSetResult>> stringSets,
       Iterable<MetricResult<HistogramData>> perWorkerHistograms) {
-    return new AutoValue_MetricQueryResults(counters, distributions, gauges, stringSets, perWorkerHistograms);
+    return new AutoValue_MetricQueryResults(counters, distributions, gauges, perWorkerGauges, stringSets, perWorkerHistograms);
   }
 
   public static MetricQueryResults create(
     Iterable<MetricResult<Long>> counters,
     Iterable<MetricResult<DistributionResult>> distributions,
     Iterable<MetricResult<GaugeResult>> gauges,
+    Iterable<MetricResult<GaugeResult>> perWorkerGauges,
     Iterable<MetricResult<StringSetResult>> stringSets) {
-  return new AutoValue_MetricQueryResults(counters, distributions, gauges, stringSets, Collections.emptyList());
+  return new AutoValue_MetricQueryResults(counters, distributions, gauges, perWorkerGauges, stringSets, Collections.emptyList());
 }
 }
