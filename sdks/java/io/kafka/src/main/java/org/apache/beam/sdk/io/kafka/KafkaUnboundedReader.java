@@ -71,6 +71,7 @@ import org.joda.time.Duration;
 import org.joda.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.HashMap;
 
 /**
  * An unbounded reader to read from Kafka. Each reader consumes messages from one or more Kafka
@@ -231,8 +232,9 @@ class KafkaUnboundedReader<K, V> extends UnboundedReader<KafkaRecord<K, V>> {
         kafkaResults.updateKafkaMetrics();
         return true;
       } else { // -- (b)
+        kafkaResults = KafkaSinkMetrics.kafkaMetrics();
         nextBatch();
-
+        kafkaResults.updateKafkaMetrics();
         if (!curBatch.hasNext()) {
           return false;
         }
@@ -302,12 +304,15 @@ class KafkaUnboundedReader<K, V> extends UnboundedReader<KafkaRecord<K, V>> {
   @Override
   public long getSplitBacklogBytes() {
     long backlogBytes = 0;
-
+    LOG.info("xxx get split backlog bytes");
+    // one split can have multiple partitions
     for (PartitionState<K, V> p : partitionStates) {
       long pBacklog = p.approxBacklogInBytes();
       if (pBacklog == UnboundedReader.BACKLOG_UNKNOWN) {
         return UnboundedReader.BACKLOG_UNKNOWN;
       }
+      LOG.info("xxx backlog bytes {} split {}", pBacklog, p.topicPartition().partition());
+      kafkaResults.updateBacklogBytes(p.topicPartition().topic(), p.topicPartition().partition(), pBacklog);
       backlogBytes += pBacklog;
     }
 
@@ -453,6 +458,10 @@ class KafkaUnboundedReader<K, V> extends UnboundedReader<KafkaRecord<K, V>> {
       this.latestOffsetFetchTime = BoundedWindow.TIMESTAMP_MIN_VALUE;
       this.lastWatermark = BoundedWindow.TIMESTAMP_MIN_VALUE;
       this.timestampPolicy = timestampPolicy;
+    }
+
+    public TopicPartition topicPartition() {
+      return topicPartition;
     }
 
     // Update consumedOffset, avgRecordSize, and avgOffsetGap

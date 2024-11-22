@@ -27,12 +27,21 @@ import org.apache.beam.sdk.metrics.Histogram;
 import org.apache.beam.sdk.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.beam.sdk.metrics.Counter;
+import org.apache.beam.sdk.metrics.DelegatingCounter;
+import org.apache.beam.sdk.metrics.Gauge;
+import org.apache.beam.sdk.metrics.MetricName;
+
 
 /** Stores and exports metrics for a batch of Kafka Client RPCs. */
 public interface KafkaMetrics {
 
   void updateSuccessfulRpcMetrics(String topic, Duration elapsedTime);
 
+  // use atomic Long
+  void updateBacklogBytes(String topic, int partitionId, long backlog);
+
+  // write to metrics container
   void updateKafkaMetrics();
 
   /** No-op implementation of {@code KafkaResults}. */
@@ -41,6 +50,9 @@ public interface KafkaMetrics {
 
     @Override
     public void updateSuccessfulRpcMetrics(String topic, Duration elapsedTime) {}
+
+    @Override
+    public void updateBacklogBytes(String topic, int partitionId, long elapsedTime) {}
 
     @Override
     public void updateKafkaMetrics() {}
@@ -69,13 +81,19 @@ public interface KafkaMetrics {
 
     static HashMap<String, Histogram> latencyHistograms = new HashMap<String, Histogram>();
 
+    // metric name
     abstract HashMap<String, ConcurrentLinkedQueue<Duration>> perTopicRpcLatencies();
+
+    // worry about concurrency?
+    static HashMap<String, Gauge> backlogGauges = new HashMap<String, Gauge>();
+
+    abstract HashMap<String, Long> perTopicPartitionBacklogs();
 
     abstract AtomicBoolean isWritable();
 
     public static KafkaMetricsImpl create() {
       return new AutoValue_KafkaMetrics_KafkaMetricsImpl(
-          new HashMap<String, ConcurrentLinkedQueue<Duration>>(), new AtomicBoolean(true));
+          new HashMap<String, ConcurrentLinkedQueue<Duration>>(), new HashMap<String, Long>(), new AtomicBoolean(true));
     }
 
     /** Record the rpc status and latency of a successful Kafka poll RPC call. */
@@ -91,6 +109,21 @@ public interface KafkaMetrics {
           latencies.add(elapsedTime);
         }
       }
+    }
+
+    /**
+     * @param topicName topicName
+     * @param partitionId partitionId for the topic Only included in the metric key if
+     *     'supportsMetricsDeletion' is enabled.
+     * @param backlog backlog for the topic Only included in the metric key if
+     *     'supportsMetricsDeletion' is enabled.
+     */
+    @Override
+    public void updateBacklogBytes(String topicName, int partitionId, long backlog) {
+      // more efficient to create each time? or to store them in memory?
+      String name = KafkaSinkMetrics.GetMetricGaugeName(topicName, partitionId).getName();
+      // dont need to check if it exists since we rewrite it
+      perTopicPartitionBacklogs().put(name, backlog);
     }
 
     /** Record rpc latency histogram metrics for all recorded topics. */
@@ -114,6 +147,14 @@ public interface KafkaMetrics {
       }
     }
 
+    // Create gauges from current map
+    private void recordBacklogBytes(){
+      for (Map.Entry<String, Long> backlogs : perTopicPartitionBacklogs().entrySet()){
+        Gauge gauge = KafkaSinkMetrics.createBacklogGauge( MetricName.named("KafkaSink", backlogs.getKey()));
+        gauge.set(backlogs.getValue());
+      }
+    }
+
     /**
      * Export all metrics recorded in this instance to the underlying {@code perWorkerMetrics}
      * containers. This function will only report metrics once per instance. Subsequent calls to
@@ -126,6 +167,7 @@ public interface KafkaMetrics {
         return;
       }
       recordRpcLatencyMetrics();
+      recordBacklogBytes();
     }
   }
 }

@@ -18,6 +18,8 @@
 package org.apache.beam.sdk.io.kafka;
 
 import org.apache.beam.sdk.metrics.DelegatingHistogram;
+import org.apache.beam.sdk.metrics.DelegatingGauge;
+import org.apache.beam.sdk.metrics.Gauge;
 import org.apache.beam.sdk.metrics.Histogram;
 import org.apache.beam.sdk.metrics.LabeledMetricNameUtils;
 import org.apache.beam.sdk.metrics.MetricName;
@@ -34,12 +36,13 @@ import org.apache.beam.sdk.util.HistogramData;
 // TODO, refactor out common parts for BQ sink, so it can be reused with other sinks, eg, GCS?
 // @SuppressWarnings("unused")
 public class KafkaSinkMetrics {
-  private static boolean supportKafkaMetrics = false;
+  private static boolean supportKafkaMetrics = true;
 
   public static final String METRICS_NAMESPACE = "KafkaSink";
 
   // Base Metric names
   private static final String RPC_LATENCY = "RpcLatency";
+  private static final String ESTIAMTED_BACKLOG_SIZE = "EstimatedBacklogSize";
 
   // Kafka Consumer Method names
   enum RpcMethod {
@@ -49,6 +52,8 @@ public class KafkaSinkMetrics {
   // Metric labels
   private static final String TOPIC_LABEL = "topic_name";
   private static final String RPC_METHOD = "rpc_method";
+  private static final String PARTITION_ID = "partition_id";
+
 
   /**
    * Creates an Histogram metric to record RPC latency. Metric will have name.
@@ -69,6 +74,40 @@ public class KafkaSinkMetrics {
     HistogramData.BucketType buckets = HistogramData.ExponentialBuckets.of(1, 17);
 
     return new DelegatingHistogram(metricName, buckets, false, true);
+  }
+
+    /**
+   * Creates an Histogram metric to record RPC latency. Metric will have name.
+   *
+   * <p>'EstimatedBacklogSize*topic_name:{topic};partition_id:{partition_id};'
+   *
+   * @param topic Kafka topic associated with this metric.
+   * @param partition_id partition id associated with this metric.
+   * @return Counter.
+   */
+  public static Gauge createBacklogGauge(String topic, int partition_id) {
+    return new DelegatingGauge(GetMetricGaugeName(topic, partition_id), false, true);
+  }
+
+    /**
+   * Creates an Histogram metric to record RPC latency. Metric will have name.
+   *
+   * <p>'EstimatedBacklogSize*topic_name:{topic};partition_id:{partition_id};'
+   *
+   * @param topic Kafka topic associated with this metric.
+   * @param partition_id partition id associated with this metric.
+   * @return Counter.
+   */
+  public static Gauge createBacklogGauge(MetricName name) {
+    return new DelegatingGauge(name, false, true);
+  }
+
+  public static MetricName GetMetricGaugeName(String topic, int partition_id){
+    LabeledMetricNameUtils.MetricNameBuilder nameBuilder =
+    LabeledMetricNameUtils.MetricNameBuilder.baseNameBuilder(ESTIAMTED_BACKLOG_SIZE);
+    nameBuilder.addLabel(PARTITION_ID, String.valueOf(partition_id));
+    nameBuilder.addLabel(TOPIC_LABEL, topic);
+    return nameBuilder.build(METRICS_NAMESPACE);
   }
 
   /**
