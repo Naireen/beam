@@ -64,6 +64,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 })
 public class StreamingStepMetricsContainer implements MetricsContainer {
 
+
   private final String stepName;
 
   private static boolean enablePerWorkerMetrics = false;

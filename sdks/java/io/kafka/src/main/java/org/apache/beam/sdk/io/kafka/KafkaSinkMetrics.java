@@ -76,9 +76,9 @@ public class KafkaSinkMetrics {
   }
 
   /**
-   * Creates a {@link Gauge} metric to record per partition backlog with the name
+   * Creates an Gauge metric to record per partition backlog. Metric will have name:
    *
-   * <p>'EstimatedBacklogSize*topic_name:{topic};partitionId:{partitionId};'.
+   * <p>'EstimatedBacklogSize*topic_name:{topic};partitionId:{partitionId};'
    *
    * @param topic Kafka topic associated with this metric.
    * @param partitionId partition id associated with this metric.
@@ -89,9 +89,9 @@ public class KafkaSinkMetrics {
   }
 
   /**
-   * Creates a {@link Gauge} metric to record per partition backlog with the name
+   * Creates an Gauge metric to record per partition backlog. Metric will have name:
    *
-   * <p>'name'.
+   * <p>'name'
    *
    * @param name MetricName for the KafkaSink.
    * @return Counter.
@@ -111,7 +111,7 @@ public class KafkaSinkMetrics {
    */
   public static MetricName getMetricGaugeName(String topic, int partitionId) {
     LabeledMetricNameUtils.MetricNameBuilder nameBuilder =
-        LabeledMetricNameUtils.MetricNameBuilder.baseNameBuilder(ESTIMATED_BACKLOG_SIZE);
+        LabeledMetricNameUtils.MetricNameBuilder.baseNameBuilder(ESTIAMTED_BACKLOG_SIZE);
     nameBuilder.addLabel(PARTITION_ID, String.valueOf(partitionId));
     nameBuilder.addLabel(TOPIC_LABEL, topic);
     return nameBuilder.build(METRICS_NAMESPACE);

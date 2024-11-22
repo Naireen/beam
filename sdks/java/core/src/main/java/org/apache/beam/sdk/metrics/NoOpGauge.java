@@ -23,8 +23,13 @@ package org.apache.beam.sdk.metrics;
  */
 public class NoOpGauge implements Gauge {
 
+<<<<<<< HEAD
   private static final NoOpGauge SINGLETON_GAUGE = new NoOpGauge();
   private static final MetricName NAME = MetricName.named(NoOpGauge.class, "singleton");
+=======
+  private static final NoOpGauge singleton = new NoOpGauge();
+  private static final MetricName name = MetricName.named(NoOpGauge.class, "singleton");
+>>>>>>> 2c17675630c (add counter stuff)
 
   private NoOpGauge() {}
 
@@ -33,10 +38,18 @@ public class NoOpGauge implements Gauge {
 
   @Override
   public MetricName getName() {
+<<<<<<< HEAD
     return NAME;
   }
 
   public static NoOpGauge getInstance() {
     return SINGLETON_GAUGE;
+=======
+    return name;
+  }
+
+  public static NoOpGauge getInstance() {
+    return singleton;
+>>>>>>> 2c17675630c (add counter stuff)
   }
 }

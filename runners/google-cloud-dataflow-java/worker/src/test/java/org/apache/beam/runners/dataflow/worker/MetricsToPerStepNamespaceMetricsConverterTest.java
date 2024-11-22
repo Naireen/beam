@@ -88,6 +88,7 @@ public class MetricsToPerStepNamespaceMetricsConverterTest {
     Map<MetricName, LockFreeHistogram.Snapshot> emptyHistograms = new HashMap<>();
     Map<MetricName, Long> counters = new HashMap<MetricName, Long>();
     Map<MetricName, Long> emptyGauges = new HashMap<MetricName, Long>();
+    Map<MetricName, Long> emptyGauges = new HashMap<MetricName, Long>();
     Map<MetricName, LabeledMetricNameUtils.ParsedMetricName> parsedMetricNames = new HashMap<>();
 
     MetricName bigQueryMetric1 = MetricName.named("BigQuerySink", "metric1");

@@ -81,11 +81,15 @@ public interface KafkaMetrics {
 
     abstract ConcurrentHashMap<String, Long> perTopicPartitionBacklogs();
 
+    static ConcurrentHashMap<String, Gauge> backlogGauges = new ConcurrentHashMap<String, Gauge>();
+
     abstract AtomicBoolean isWritable();
 
     public static KafkaMetricsImpl create() {
       return new AutoValue_KafkaMetrics_KafkaMetricsImpl(
           new ConcurrentHashMap<String, ConcurrentLinkedQueue<Duration>>(),
+          new HashMap<String, Long>(),
+         
           new ConcurrentHashMap<String, Long>(),
           new AtomicBoolean(true));
     }
