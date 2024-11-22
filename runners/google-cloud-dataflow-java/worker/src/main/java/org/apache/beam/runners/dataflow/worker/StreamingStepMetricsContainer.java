@@ -49,7 +49,8 @@ import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.base.Function;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.base.Predicates;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.FluentIterable;
 import org.checkerframework.checker.nullness.qual.Nullable;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * For Dataflow Streaming, we want to efficiently support many threads report metric updates, and a
  * single total delta being reported periodically as physical counters.
@@ -58,6 +59,9 @@ import org.checkerframework.checker.nullness.qual.Nullable;
   "nullness" // TODO(https://github.com/apache/beam/issues/20497)
 })
 public class StreamingStepMetricsContainer implements MetricsContainer {
+
+  private static final Logger LOG = LoggerFactory.getLogger(StreamingStepMetricsContainer.class);
+
   private final String stepName;
 
   private static boolean enablePerWorkerMetrics = false;
@@ -68,6 +72,9 @@ public class StreamingStepMetricsContainer implements MetricsContainer {
   private final ConcurrentHashMap<MetricName, AtomicLong> perWorkerCounters;
 
   private MetricsMap<MetricName, GaugeCell> gauges = new MetricsMap<>(GaugeCell::new);
+
+  // how to handle concurrency
+  private final ConcurrentHashMap<MetricName, GaugeCell> perWorkerGauges  = new ConcurrentHashMap<>();
 
   private MetricsMap<MetricName, StringSetCell> stringSet = new MetricsMap<>(StringSetCell::new);
 
@@ -82,7 +89,7 @@ public class StreamingStepMetricsContainer implements MetricsContainer {
   private final ConcurrentHashMap<MetricName, LabeledMetricNameUtils.ParsedMetricName>
       parsedPerWorkerMetricsCache;
 
-  // PerWorkerCounters that have been longer than this value will be removed from the underlying
+  // PerWorkerCounters and PerWorkerGauges that have been longer than this value will be removed from the underlying
   // metrics map.
   private final Duration maximumPerWorkerCounterStaleness = Duration.ofMinutes(5);
 
@@ -161,6 +168,21 @@ public class StreamingStepMetricsContainer implements MetricsContainer {
   @Override
   public Gauge getGauge(MetricName metricName) {
     return gauges.get(metricName);
+  }
+
+  @Override
+  public Gauge getPerWorkerGauge(MetricName metricName) {
+    if (!enablePerWorkerMetrics) {
+      return MetricsContainer.super.getPerWorkerGauge(metricName);
+    }
+
+    Gauge val = perWorkerGauges.get(metricName);
+    if (val != null) {
+      return val;
+    }
+
+    return perWorkerGauges.computeIfAbsent(
+        metricName, name -> new GaugeCell(metricName));
   }
 
   @Override
@@ -330,10 +352,11 @@ public class StreamingStepMetricsContainer implements MetricsContainer {
   @VisibleForTesting
   Iterable<PerStepNamespaceMetrics> extractPerWorkerMetricUpdates() {
     ConcurrentHashMap<MetricName, Long> counters = new ConcurrentHashMap<MetricName, Long>();
+    ConcurrentHashMap<MetricName, Long> gauges = new ConcurrentHashMap<MetricName, Long>();
     ConcurrentHashMap<MetricName, LockFreeHistogram.Snapshot> histograms =
         new ConcurrentHashMap<MetricName, LockFreeHistogram.Snapshot>();
     HashSet<MetricName> currentZeroValuedCounters = new HashSet<MetricName>();
-
+    LOG.info("xxx per worker extractPerWorkerMetricUpdates");
     // Extract metrics updates.
     perWorkerCounters.forEach(
         (k, v) -> {
@@ -344,6 +367,12 @@ public class StreamingStepMetricsContainer implements MetricsContainer {
           }
           counters.put(k, val);
         });
+    perWorkerGauges.forEach(
+      (k, v) -> {
+        Long val = v.getCumulative().value();
+        LOG.info("xxx per worker gauges k {} val {}", k.getName(), val);
+        gauges.put(k, val); // no special handing for zero, since that value is important
+      });
     perWorkerHistograms.forEach(
         (k, v) -> {
           v.getSnapshotAndReset().ifPresent(snapshot -> histograms.put(k, snapshot));
@@ -352,7 +381,7 @@ public class StreamingStepMetricsContainer implements MetricsContainer {
     deleteStaleCounters(currentZeroValuedCounters, Instant.now(clock));
 
     return MetricsToPerStepNamespaceMetricsConverter.convert(
-        stepName, counters, histograms, parsedPerWorkerMetricsCache);
+        stepName, counters, gauges, histograms, parsedPerWorkerMetricsCache);
   }
 
   /**

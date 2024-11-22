@@ -665,6 +665,7 @@ public final class StreamingDataflowWorker {
     }
 
     if (DataflowRunner.hasExperiment(options, "enable_kafka_metrics")) {
+      LOG.info("xxx enable experiement");
       KafkaSinkMetrics.setSupportKafkaMetrics(true);
     }
 

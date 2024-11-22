@@ -84,6 +84,32 @@ public class MetricsToPerStepNamespaceMetricsConverter {
                     .setValueInt64(value));
   }
 
+    /**
+   * @param metricName The {@link MetricName} that represents this counter.
+   * @param value The counter value.
+   * @return If the conversion succeeds, {@code MetricValue} that represents this counter. Otherwise
+   *     returns an empty optional
+   */
+  private static Optional<MetricValue> convertGaugeToMetricValue(
+      MetricName metricName,
+      Long value,
+      Map<MetricName, LabeledMetricNameUtils.ParsedMetricName> parsedPerWorkerMetricsCache) {
+
+    if ((!metricName.getNamespace().equals(BigQuerySinkMetrics.METRICS_NAMESPACE)
+            && !metricName.getNamespace().equals(KafkaSinkMetrics.METRICS_NAMESPACE))) {
+      return Optional.empty();
+    }
+
+    return getParsedMetricName(metricName, parsedPerWorkerMetricsCache)
+        .filter(labeledName -> !labeledName.getBaseName().isEmpty())
+        .map(
+            labeledName ->
+                new MetricValue()
+                    .setMetric(labeledName.getBaseName())
+                    .setMetricLabels(labeledName.getMetricLabels())
+                    .setGaugeInt64(value)); // change this
+  }
+
   /**
    * Adds {@code outlierStats} to {@code outputHistogram} if {@code inputHistogram} has recorded
    * overflow or underflow values.
@@ -194,6 +220,7 @@ public class MetricsToPerStepNamespaceMetricsConverter {
   public static Collection<PerStepNamespaceMetrics> convert(
       String stepName,
       Map<MetricName, Long> counters,
+      Map<MetricName, Long> gauges,
       Map<MetricName, LockFreeHistogram.Snapshot> histograms,
       Map<MetricName, LabeledMetricNameUtils.ParsedMetricName> parsedPerWorkerMetricsCache) {
 
@@ -243,6 +270,27 @@ public class MetricsToPerStepNamespaceMetricsConverter {
       stepNamespaceMetrics.getMetricValues().add(metricValue.get());
     }
 
+    for (Entry<MetricName, Long> entry : gauges.entrySet()) {
+      MetricName metricName = entry.getKey();
+       Optional<MetricValue> metricValue =
+        convertGaugeToMetricValue(metricName, entry.getValue(), parsedPerWorkerMetricsCache);
+      if (!metricValue.isPresent()) {
+        continue;
+      }
+
+      PerStepNamespaceMetrics stepNamespaceMetrics =
+          metricsByNamespace.get(metricName.getNamespace());
+      if (stepNamespaceMetrics == null) {
+        stepNamespaceMetrics =
+            new PerStepNamespaceMetrics()
+                .setMetricValues(new ArrayList<>())
+                .setOriginalStep(stepName)
+                .setMetricsNamespace(metricName.getNamespace());
+        metricsByNamespace.put(metricName.getNamespace(), stepNamespaceMetrics);
+      }
+
+      stepNamespaceMetrics.getMetricValues().add(metricValue.get());
+    }
     return metricsByNamespace.values();
   }
 }
