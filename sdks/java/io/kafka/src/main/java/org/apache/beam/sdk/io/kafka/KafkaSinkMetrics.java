@@ -24,8 +24,9 @@ import org.apache.beam.sdk.metrics.Histogram;
 import org.apache.beam.sdk.metrics.LabeledMetricNameUtils;
 import org.apache.beam.sdk.metrics.MetricName;
 import org.apache.beam.sdk.util.HistogramData;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+// import org.slf4j.Logger;
+// import org.slf4j.LoggerFactory;
 
 /**
  * Helper class to create per worker metrics for Kafka Sink stages.
@@ -39,7 +40,7 @@ import org.slf4j.LoggerFactory;
 // @SuppressWarnings("unused")
 public class KafkaSinkMetrics {
   private static boolean supportKafkaMetrics = false;
-  private static final Logger LOG = LoggerFactory.getLogger(KafkaSinkMetrics.class);
+  // private static final Logger LOG = LoggerFactory.getLogger(KafkaSinkMetrics.class);
 
   public static final String METRICS_NAMESPACE = "KafkaSink";
 
@@ -116,12 +117,16 @@ public class KafkaSinkMetrics {
    * @return Counter.
    */
   public static Gauge createBacklogGauge(MetricName name) {
+    // MetricsContainer container = MetricsEnvironment.getCurrentContainer();
+    // if (container != null) {
+    //   LOG.info("xxx container {}", container.toString());
+    // }
     return new DelegatingGauge(name, false, true);
   }
 
   // create a map of gauges?
   public static Gauge createBacklogGauge(MetricName name, boolean inProcessWideContainer) {
-    LOG.info("xxx create gauge");
+    // LOG.info("xxx create gauge");
     return new DelegatingGauge(name, inProcessWideContainer, true);
   }
 

@@ -241,6 +241,7 @@ public class Metrics {
     public void set(long value) {
       MetricsContainer container = MetricsEnvironment.getCurrentContainer();
       if (container != null) {
+        // LOG.info("xxx container {}", container.toString());
         container.getGauge(name).set(value);
       }
     }

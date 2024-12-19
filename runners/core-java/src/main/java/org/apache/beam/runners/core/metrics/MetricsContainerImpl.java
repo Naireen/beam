@@ -113,6 +113,11 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     this(stepName, false);
   }
 
+  @Override
+  public String getName() {
+    return this.stepName;
+  }
+
   /**
    * Create a new {@link MetricsContainerImpl} associated with the entire process. Used for
    * collecting processWide metrics for HarnessMonitoringInfoRequest/Response.
@@ -287,11 +292,12 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
 
     MetricName metricName = metricKey.metricName();
     LOG.info(
-        "xxx metric name {} {} {} {}",
+        "xxx metric name {} {} {} {} {}",
         metricName,
         metricName.getNamespace(),
         typeUrn.toString(),
-        userUrn.toString());
+        userUrn.toString(),
+        metricKey.stepName());
     // if name space BQ and Kafka, then it goes through per worker metrics?
     if (metricName instanceof MonitoringInfoMetricName) {
       LOG.info("xxx here instance of MonitoringInfoMetricName");
@@ -307,14 +313,24 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
       // Drop if the stepname is not set. All user counters must be
       // defined for a PTransform. They must be defined on a container bound to a step.
       if (this.stepName == null) {
-        return null;
+        // return null;
+        // this.stepName="dummy_step_name";
+        builder
+            .setUrn(userUrn)
+            .setLabel(
+                MonitoringInfoConstants.Labels.NAMESPACE, metricKey.metricName().getNamespace())
+            .setLabel(MonitoringInfoConstants.Labels.NAME, metricKey.metricName().getName())
+            .setLabel(MonitoringInfoConstants.Labels.PTRANSFORM, "dummy_step_name");
+      } else {
+        builder
+            .setUrn(userUrn)
+            .setLabel(
+                MonitoringInfoConstants.Labels.NAMESPACE, metricKey.metricName().getNamespace())
+            .setLabel(MonitoringInfoConstants.Labels.NAME, metricKey.metricName().getName())
+            .setLabel(
+                MonitoringInfoConstants.Labels.PTRANSFORM,
+                metricKey.stepName()); // not assoicated with a step?
       }
-
-      builder
-          .setUrn(userUrn)
-          .setLabel(MonitoringInfoConstants.Labels.NAMESPACE, metricKey.metricName().getNamespace())
-          .setLabel(MonitoringInfoConstants.Labels.NAME, metricKey.metricName().getName())
-          .setLabel(MonitoringInfoConstants.Labels.PTRANSFORM, metricKey.stepName());
     }
     // based on namespace, add per worker metrics here
     if (metricName.getNamespace().equals("BigQuerySink")

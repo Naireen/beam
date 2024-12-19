@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.beam.runners.core.metrics.GaugeCell;
 import org.apache.beam.runners.core.metrics.MetricsContainerImpl;
-import org.apache.beam.sdk.metrics.Gauge;
 import org.apache.beam.sdk.metrics.Histogram;
 import org.apache.beam.sdk.metrics.MetricName;
 import org.apache.beam.sdk.metrics.MetricsEnvironment;
@@ -76,7 +75,7 @@ public class KafkaMetricsTest {
     }
 
     @Override
-    public Gauge getPerWorkerGauge(MetricName metricName) {
+    public GaugeCell getPerWorkerGauge(MetricName metricName) {
       perWorkerGauges.computeIfAbsent(metricName, name -> new GaugeCell(metricName));
       return perWorkerGauges.get(metricName);
     }

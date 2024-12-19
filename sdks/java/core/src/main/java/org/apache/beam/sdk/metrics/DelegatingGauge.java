@@ -20,6 +20,9 @@ package org.apache.beam.sdk.metrics;
 import java.io.Serializable;
 import org.apache.beam.sdk.annotations.Internal;
 
+// import org.slf4j.Logger;
+// import org.slf4j.LoggerFactory;
+
 /** Implementation of {@link Gauge} that delegates to the instance for the current context. */
 @Internal
 public class DelegatingGauge implements Metric, Gauge, Serializable {
@@ -36,6 +39,10 @@ public class DelegatingGauge implements Metric, Gauge, Serializable {
    */
   public DelegatingGauge(MetricName name) {
     this(name, false, false);
+    // MetricsContainer container = MetricsEnvironment.getCurrentContainer();
+    // if (container != null) {
+    //   LOG.info("xxx container {}", container.toString());
+    // }
   }
 
   /**
@@ -47,6 +54,7 @@ public class DelegatingGauge implements Metric, Gauge, Serializable {
    */
   public DelegatingGauge(MetricName name, boolean processWideContainer) {
     this(name, processWideContainer, false);
+    // LOG.info("xxx metric container name {} {}", processWideContainer, container.toString());
   }
 
   /**
@@ -75,7 +83,8 @@ public class DelegatingGauge implements Metric, Gauge, Serializable {
     MetricsContainer container =
         this.processWideContainer
             ? MetricsEnvironment.getProcessWideContainer()
-            : MetricsEnvironment.getCurrentContainer();
+            : MetricsEnvironment
+                .getCurrentContainer(); // should be false to create in current container?
     if (container == null) {
       return;
     }

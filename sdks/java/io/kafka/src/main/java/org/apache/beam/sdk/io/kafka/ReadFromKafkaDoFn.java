@@ -41,6 +41,8 @@ import org.apache.beam.sdk.metrics.Distribution;
 import org.apache.beam.sdk.metrics.Gauge;
 import org.apache.beam.sdk.metrics.Lineage;
 import org.apache.beam.sdk.metrics.Metrics;
+import org.apache.beam.sdk.metrics.MetricsContainer;
+import org.apache.beam.sdk.metrics.MetricsEnvironment;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.SerializableFunction;
 import org.apache.beam.sdk.transforms.errorhandling.BadRecordRouter;
@@ -563,11 +565,29 @@ abstract class ReadFromKafkaDoFn<K, V>
                         .doubleValue()
                     * avgRecordSize.estimateRecordByteSizeToOffsetCountRatio()));
         // can we do it not each time we process the element?
-        KafkaMetrics kafkaResults = KafkaSinkMetrics.kafkaMetrics();
-        // Gauge backlogBytes =
-        // Metrics.gauge(
-        //     METRIC_NAMESPACE, RAW_SIZE_METRIC_PREFIX + "backlogBytes_" + topicPartition.toString());
+        MetricsContainer container = MetricsEnvironment.getCurrentContainer();
+        if (container != null) {
+          LOG.info("xxx container {}", container.toString());
+        }
+        // add metadata to the following Guages , check this isn't null, this works
+        Gauge perPartion =
+            Metrics.gauge(
+                "KafkaSink",
+                KafkaSinkMetrics.getMetricGaugeName(
+                        "test-dummy-topic", kafkaSourceDescriptor.getPartition())
+                    .getName());
 
+        perPartion.set(
+            (long)
+                (BigDecimal.valueOf(
+                            Preconditions.checkStateNotNull(
+                                offsetEstimatorCache.get(kafkaSourceDescriptor).estimate()))
+                        .subtract(BigDecimal.valueOf(expectedOffset), MathContext.DECIMAL128)
+                        .doubleValue()
+                    * avgRecordSize
+                        .estimateRecordByteSizeToOffsetCountRatio())); // kafkaResults.recordBacklogBytes(
+
+        KafkaMetrics kafkaResults = KafkaSinkMetrics.kafkaMetrics();
         kafkaResults.recordBacklogBytes(
             kafkaSourceDescriptor.getTopic(),
             kafkaSourceDescriptor.getPartition(),

@@ -93,4 +93,8 @@ public interface MetricsContainer extends Serializable {
   default Iterable<MetricsApi.MonitoringInfo> getMonitoringInfos() {
     throw new RuntimeException("getMonitoringInfos is not implemented on this MetricsContainer.");
   }
+
+  default String getName() {
+    return "NoName";
+  }
 }

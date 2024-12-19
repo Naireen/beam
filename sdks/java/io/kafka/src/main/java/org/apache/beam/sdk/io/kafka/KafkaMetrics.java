@@ -30,6 +30,9 @@ import org.apache.beam.sdk.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// import org.apache.beam.sdk.metrics.MetricsContainer;
+// import org.apache.beam.sdk.metrics.MetricsEnvironment;
+
 /** Stores and exports metrics for a batch of Kafka Client RPCs. */
 public interface KafkaMetrics {
 
@@ -144,12 +147,17 @@ public interface KafkaMetrics {
 
     @Override
     public void recordBacklogBytes(String topic, int partitionId, long backlog) {
+      // MetricsContainer container = MetricsEnvironment.getCurrentContainer();
+      // if (container != null) {
+      //   LOG.info("xxx container {}", container.toString());
+      // }
       // create in current container
       Gauge gauge =
           KafkaSinkMetrics.createBacklogGauge(
               MetricName.named(
-                  "KafkaSink", KafkaSinkMetrics.getMetricGaugeName(topic, partitionId).getName()),
-              true); // must be true
+                  "KafkaSink",
+                  KafkaSinkMetrics.getMetricGaugeName(topic, partitionId)
+                      .getName())); // must be true
       gauge.set(backlog);
     }
 
