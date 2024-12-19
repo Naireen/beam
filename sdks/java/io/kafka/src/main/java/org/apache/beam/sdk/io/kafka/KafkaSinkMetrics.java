@@ -24,6 +24,8 @@ import org.apache.beam.sdk.metrics.Histogram;
 import org.apache.beam.sdk.metrics.LabeledMetricNameUtils;
 import org.apache.beam.sdk.metrics.MetricName;
 import org.apache.beam.sdk.util.HistogramData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Helper class to create per worker metrics for Kafka Sink stages.
@@ -37,6 +39,7 @@ import org.apache.beam.sdk.util.HistogramData;
 // @SuppressWarnings("unused")
 public class KafkaSinkMetrics {
   private static boolean supportKafkaMetrics = false;
+  private static final Logger LOG = LoggerFactory.getLogger(KafkaSinkMetrics.class);
 
   public static final String METRICS_NAMESPACE = "KafkaSink";
 
@@ -89,6 +92,22 @@ public class KafkaSinkMetrics {
   }
 
   /**
+   * Creates an Gauge metric to record per partition backlog in current thread. Metric will have
+   * name:
+   *
+   * <p>'EstimatedBacklogSize*topic_name:{topic};partitionId:{partitionId};'
+   *
+   * @param topic Kafka topic associated with this metric.
+   * @param partitionId partition id associated with this metric.
+   * @return Counter.
+   */
+  public static Gauge createBacklogGauge(
+      String topic, int partitionId, boolean inProcessWideContainer) {
+    return new DelegatingGauge(
+        getMetricGaugeName(topic, partitionId), inProcessWideContainer, true);
+  }
+
+  /**
    * Creates an Gauge metric to record per partition backlog. Metric will have name:
    *
    * <p>'name'
@@ -98,6 +117,12 @@ public class KafkaSinkMetrics {
    */
   public static Gauge createBacklogGauge(MetricName name) {
     return new DelegatingGauge(name, false, true);
+  }
+
+  // create a map of gauges?
+  public static Gauge createBacklogGauge(MetricName name, boolean inProcessWideContainer) {
+    LOG.info("xxx create gauge");
+    return new DelegatingGauge(name, inProcessWideContainer, true);
   }
 
   /**

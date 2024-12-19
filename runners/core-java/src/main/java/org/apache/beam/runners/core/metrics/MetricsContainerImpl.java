@@ -86,6 +86,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
   private MetricsMap<MetricName, DistributionCell> distributions =
       new MetricsMap<>(DistributionCell::new);
 
+  // both gauges and per worker gauges
   private MetricsMap<MetricName, GaugeCell> gauges = new MetricsMap<>(GaugeCell::new);
 
   private MetricsMap<MetricName, StringSetCell> stringSets = new MetricsMap<>(StringSetCell::new);
@@ -192,6 +193,18 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     return gauges.get(metricName);
   }
 
+  @Override
+  public GaugeCell getPerWorkerGauge(MetricName metricName) {
+    // LOG.info("Xxx get per Worker Gauge {}", metricName);
+    GaugeCell perWorkerGauge = gauges.get(metricName);
+    LOG.info("Xxx is per WOrker? {}", perWorkerGauge.perWorker());
+    perWorkerGauge.setPerWorker();
+    LOG.info("Xxx is per WOrker now? {}", perWorkerGauge.perWorker());
+    // annotate with correct per worker type
+    // TODO: how to move to factory function in MetricsMap?
+    return perWorkerGauge;
+  }
+
   /**
    * Return a {@code GaugeCell} named {@code metricName}. If it doesn't exist, return {@code null}.
    */
@@ -248,7 +261,15 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     builder.setType(typeUrn);
 
     MetricName metricName = metricKey.metricName();
+    LOG.info(
+        "xxx metric name {} {} {} {}",
+        metricName,
+        metricName.getNamespace(),
+        typeUrn.toString(),
+        userUrn.toString());
+    // if name space BQ and Kafka, then it goes through per worker metrics?
     if (metricName instanceof MonitoringInfoMetricName) {
+      LOG.info("xxx here instance of MonitoringInfoMetricName");
       MonitoringInfoMetricName monitoringInfoName = (MonitoringInfoMetricName) metricName;
       // Represents a specific MonitoringInfo for a specific URN.
       builder.setUrn(monitoringInfoName.getUrn());
@@ -256,6 +277,8 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
         builder.setLabel(e.getKey(), e.getValue());
       }
     } else { // Represents a user counter.
+      LOG.info("xxx represents a user counter {} {}", metricName, this.stepName);
+
       // Drop if the stepname is not set. All user counters must be
       // defined for a PTransform. They must be defined on a container bound to a step.
       if (this.stepName == null) {
@@ -267,6 +290,11 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
           .setLabel(MonitoringInfoConstants.Labels.NAMESPACE, metricKey.metricName().getNamespace())
           .setLabel(MonitoringInfoConstants.Labels.NAME, metricKey.metricName().getName())
           .setLabel(MonitoringInfoConstants.Labels.PTRANSFORM, metricKey.stepName());
+    }
+    // based on namespace, add per worker metrics here
+    if (metricName.getNamespace().equals("BigQuerySink")
+        || metricName.getNamespace().equals("KafkaSink")) {
+      builder.setLabel(MonitoringInfoConstants.Labels.PER_WORKER_METRIC, "true");
     }
     return builder;
   }
@@ -322,7 +350,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
 
   /**
    * @param metricUpdate
-   * @return The MonitoringInfo generated from the distribution metricUpdate.
+   * @return The MonitoringInfo generated from the gauge metricUpdate.
    */
   private @Nullable MonitoringInfo gaugeUpdateToMonitoringInfo(
       MetricUpdate<GaugeData> metricUpdate) {
@@ -516,8 +544,9 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
   }
 
   private void updateForLatestInt64Type(MonitoringInfo monitoringInfo) {
+    LOG.info("xxx updateForLatestInt64Type");
     MetricName metricName = MonitoringInfoMetricName.of(monitoringInfo);
-    GaugeCell gauge = getGauge(metricName);
+    GaugeCell gauge = getGauge(metricName); // how to get which one it is?
     gauge.update(decodeInt64Gauge(monitoringInfo.getPayload()));
   }
 
@@ -530,6 +559,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
   /** Update values of this {@link MetricsContainerImpl} by reading from {@code monitoringInfos}. */
   public void update(Iterable<MonitoringInfo> monitoringInfos) {
     for (MonitoringInfo monitoringInfo : monitoringInfos) {
+      LOG.info("xxx monitoring infos {}", monitoringInfo.toString());
       if (monitoringInfo.getPayload().isEmpty()) {
         return;
       }

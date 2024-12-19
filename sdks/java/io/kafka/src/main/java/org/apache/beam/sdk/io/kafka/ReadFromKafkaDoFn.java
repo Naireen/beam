@@ -406,6 +406,7 @@ abstract class ReadFromKafkaDoFn<K, V>
       WatermarkEstimator<Instant> watermarkEstimator,
       MultiOutputReceiver receiver)
       throws Exception {
+
     final LoadingCache<KafkaSourceDescriptor, AverageRecordSize> avgRecordSizeCache =
         Preconditions.checkStateNotNull(this.avgRecordSizeCache);
     final LoadingCache<KafkaSourceDescriptor, KafkaLatestOffsetEstimator> offsetEstimatorCache =
@@ -443,6 +444,8 @@ abstract class ReadFromKafkaDoFn<K, V>
     }
 
     LOG.info("Creating Kafka consumer for process continuation for {}", kafkaSourceDescriptor);
+    // KafkaMetrics kafkaResults = KafkaSinkMetrics.kafkaMetrics();
+
     try (Consumer<byte[], byte[]> consumer = consumerFactoryFn.apply(updatedConsumerConfig)) {
       ConsumerSpEL.evaluateAssign(
           consumer, ImmutableList.of(kafkaSourceDescriptor.getTopicPartition()));
@@ -550,6 +553,7 @@ abstract class ReadFromKafkaDoFn<K, V>
           }
         }
 
+        Preconditions.checkStateNotNull(offsetEstimatorCache.get(kafkaSourceDescriptor));
         backlogBytes.set(
             (long)
                 (BigDecimal.valueOf(
@@ -558,6 +562,24 @@ abstract class ReadFromKafkaDoFn<K, V>
                         .subtract(BigDecimal.valueOf(expectedOffset), MathContext.DECIMAL128)
                         .doubleValue()
                     * avgRecordSize.estimateRecordByteSizeToOffsetCountRatio()));
+        // can we do it not each time we process the element?
+        KafkaMetrics kafkaResults = KafkaSinkMetrics.kafkaMetrics();
+        // Gauge backlogBytes =
+        // Metrics.gauge(
+        //     METRIC_NAMESPACE, RAW_SIZE_METRIC_PREFIX + "backlogBytes_" + topicPartition.toString());
+
+        kafkaResults.recordBacklogBytes(
+            kafkaSourceDescriptor.getTopic(),
+            kafkaSourceDescriptor.getPartition(),
+            (long)
+                (BigDecimal.valueOf(
+                            Preconditions.checkStateNotNull(
+                                offsetEstimatorCache.get(kafkaSourceDescriptor).estimate()))
+                        .subtract(BigDecimal.valueOf(expectedOffset), MathContext.DECIMAL128)
+                        .doubleValue()
+                    * avgRecordSize
+                        .estimateRecordByteSizeToOffsetCountRatio())); // is this correct?
+        kafkaResults.updateKafkaMetrics();
       }
     }
   }
