@@ -211,6 +211,7 @@ public class Metrics {
     public void set(long value) {
       MetricsContainer container = MetricsEnvironment.getCurrentContainer();
       if (container != null) {
+        LOG.info("xxx Delegating gauge {}", container.getName());
         container.getGauge(name).set(value);
       }
     }

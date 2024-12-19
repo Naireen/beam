@@ -40,6 +40,7 @@ import org.apache.beam.sdk.io.range.OffsetRange;
 import org.apache.beam.sdk.metrics.Distribution;
 import org.apache.beam.sdk.metrics.Gauge;
 import org.apache.beam.sdk.metrics.Lineage;
+import org.apache.beam.sdk.metrics.MetricName;
 import org.apache.beam.sdk.metrics.Metrics;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.SerializableFunction;
@@ -563,14 +564,21 @@ abstract class ReadFromKafkaDoFn<K, V>
                         .doubleValue()
                     * avgRecordSize.estimateRecordByteSizeToOffsetCountRatio()));
         // can we do it not each time we process the element?
-        KafkaMetrics kafkaResults = KafkaSinkMetrics.kafkaMetrics();
+        // KafkaMetrics kafkaResults = KafkaSinkMetrics.kafkaMetrics();
         // Gauge backlogBytes =
         // Metrics.gauge(
-        //     METRIC_NAMESPACE, RAW_SIZE_METRIC_PREFIX + "backlogBytes_" + topicPartition.toString());
-
-        kafkaResults.recordBacklogBytes(
-            kafkaSourceDescriptor.getTopic(),
-            kafkaSourceDescriptor.getPartition(),
+        //     METRIC_NAMESPACE, RAW_SIZE_METRIC_PREFIX + "backlogBytes_" +
+        // topicPartition.toString());
+        Gauge perPartion =
+            new org.apache.beam.sdk.metrics.DelegatingGauge(
+                MetricName.named(
+                    "KafkaSink",
+                    KafkaSinkMetrics.getMetricGaugeName(
+                            kafkaSourceDescriptor.getTopic(), kafkaSourceDescriptor.getPartition())
+                        .toString()),
+                false,
+                true);
+        perPartion.set(
             (long)
                 (BigDecimal.valueOf(
                             Preconditions.checkStateNotNull(
@@ -578,8 +586,17 @@ abstract class ReadFromKafkaDoFn<K, V>
                         .subtract(BigDecimal.valueOf(expectedOffset), MathContext.DECIMAL128)
                         .doubleValue()
                     * avgRecordSize
-                        .estimateRecordByteSizeToOffsetCountRatio())); // is this correct?
-        kafkaResults.updateKafkaMetrics();
+                        .estimateRecordByteSizeToOffsetCountRatio())); // kafkaResults.recordBacklogBytes(
+        //     kafkaSourceDescriptor.getTopic(),
+        //     kafkaSourceDescriptor.getPartition(),
+        //     (long)
+        //         (BigDecimal.valueOf(
+        //                     Preconditions.checkStateNotNull(
+        //                         offsetEstimatorCache.get(kafkaSourceDescriptor).estimate()))
+        //                 .subtract(BigDecimal.valueOf(expectedOffset), MathContext.DECIMAL128)
+        //                 .doubleValue()
+        //             * avgRecordSize
+        //                 .estimateRecordByteSizeToOffsetCountRatio())); // is this correct?
       }
     }
   }
