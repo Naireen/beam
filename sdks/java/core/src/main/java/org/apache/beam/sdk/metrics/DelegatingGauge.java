@@ -26,6 +26,7 @@ public class DelegatingGauge implements Metric, Gauge, Serializable {
   private final MetricName name;
   private final boolean processWideContainer;
   private final boolean perWorkerGauge;
+  // private static final Logger LOG = LoggerFactory.getLogger(DelegatingGauge.class);
 
   /**
    * Create a {@code DelegatingGauge} with {@code perWorkerGauge} and {@code processWideContainer}
@@ -58,6 +59,14 @@ public class DelegatingGauge implements Metric, Gauge, Serializable {
     this.name = name;
     this.processWideContainer = processWideContainer;
     this.perWorkerGauge = perWorkerGauge;
+    // MetricsContainer container = MetricsEnvironment.getProcessWideContainer();
+    // if (container != null) {
+    //   LOG.info("xxx MetricsEnvironment.getProcessWideContainer() {}", container.toString());
+    // }
+    // container = MetricsEnvironment.getCurrentContainer();
+    // if (container != null) {
+    //   LOG.info("xxx MetricsEnvironment.getCurrentContainer() {}", container.toString());
+    // }
   }
 
   /** Set the gauge. */

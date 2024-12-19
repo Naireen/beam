@@ -37,6 +37,7 @@ public class GaugeCell implements Gauge, MetricCell<GaugeData> {
   private final DirtyState dirty = new DirtyState();
   private final AtomicReference<GaugeData> gaugeValue = new AtomicReference<>(GaugeData.empty());
   private final MetricName name;
+  private boolean perWorker;
 
   /**
    * Generally, runners should construct instances using the methods in {@link
@@ -45,6 +46,12 @@ public class GaugeCell implements Gauge, MetricCell<GaugeData> {
    */
   public GaugeCell(MetricName name) {
     this.name = name;
+    this.perWorker = false;
+  }
+
+  public GaugeCell(MetricName name, boolean perWorker) {
+    this.name = name;
+    this.perWorker = perWorker;
   }
 
   @Override
@@ -88,7 +95,8 @@ public class GaugeCell implements Gauge, MetricCell<GaugeData> {
       GaugeCell gaugeCell = (GaugeCell) object;
       return Objects.equals(dirty, gaugeCell.dirty)
           && Objects.equals(gaugeValue.get(), gaugeCell.gaugeValue.get())
-          && Objects.equals(name, gaugeCell.name);
+          && Objects.equals(name, gaugeCell.name)
+          && perWorker == gaugeCell.perWorker;
     }
 
     return false;
@@ -97,5 +105,13 @@ public class GaugeCell implements Gauge, MetricCell<GaugeData> {
   @Override
   public int hashCode() {
     return Objects.hash(dirty, gaugeValue.get(), name);
+  }
+
+  public boolean perWorker() {
+    return this.perWorker;
+  }
+
+  public void setPerWorker() {
+    this.perWorker = true;
   }
 }

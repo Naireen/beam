@@ -37,6 +37,12 @@ public interface KafkaMetrics {
 
   void updateBacklogBytes(String topic, int partitionId, long backlog);
 
+  // create cauge on current container
+  void recordBacklogBytes(String topic, int partitionId, long backlog);
+
+  // void updateBacklogBytes(String topic, int partitionId, long backlog,  boolean
+  // inProcessWideContainer);
+
   void updateKafkaMetrics();
 
   /** No-op implementation of {@code KafkaResults}. */
@@ -48,6 +54,13 @@ public interface KafkaMetrics {
 
     @Override
     public void updateBacklogBytes(String topic, int partitionId, long elapsedTime) {}
+
+    @Override
+    public void recordBacklogBytes(String topic, int partitionId, long backlog) {};
+
+    // @Override
+    // public void updateBacklogBytes(String topic, int partitionId, long elapsedTime, boolean
+    // inProcessWideContainer) {}
 
     @Override
     public void updateKafkaMetrics() {}
@@ -129,6 +142,17 @@ public interface KafkaMetrics {
       }
     }
 
+    @Override
+    public void recordBacklogBytes(String topic, int partitionId, long backlog) {
+      // create in current container
+      Gauge gauge =
+          KafkaSinkMetrics.createBacklogGauge(
+              MetricName.named(
+                  "KafkaSink", KafkaSinkMetrics.getMetricGaugeName(topic, partitionId).getName()),
+              true); // must be true
+      gauge.set(backlog);
+    }
+
     /** Record rpc latency histogram metrics for all recorded topics. */
     private void recordRpcLatencyMetrics() {
       for (Map.Entry<String, ConcurrentLinkedQueue<Duration>> topicLatencies :
@@ -152,6 +176,7 @@ public interface KafkaMetrics {
 
     private void recordBacklogBytes() {
       for (Map.Entry<String, Long> backlogs : perTopicPartitionBacklogs().entrySet()) {
+        // in current container
         Gauge gauge =
             KafkaSinkMetrics.createBacklogGauge(MetricName.named("KafkaSink", backlogs.getKey()));
         gauge.set(backlogs.getValue());
