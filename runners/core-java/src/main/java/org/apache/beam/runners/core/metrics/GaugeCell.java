@@ -46,12 +46,6 @@ public class GaugeCell implements Gauge, MetricCell<GaugeData> {
    */
   public GaugeCell(MetricName name) {
     this.name = name;
-    this.perWorker = false;
-  }
-
-  public GaugeCell(MetricName name, boolean perWorker) {
-    this.name = name;
-    this.perWorker = perWorker;
   }
 
   @Override
@@ -105,13 +99,5 @@ public class GaugeCell implements Gauge, MetricCell<GaugeData> {
   @Override
   public int hashCode() {
     return Objects.hash(dirty, gaugeValue.get(), name);
-  }
-
-  public boolean perWorker() {
-    return this.perWorker;
-  }
-
-  public void setPerWorker() {
-    this.perWorker = true;
   }
 }

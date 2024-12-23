@@ -147,17 +147,11 @@ public interface KafkaMetrics {
 
     @Override
     public void recordBacklogBytes(String topic, int partitionId, long backlog) {
-      // MetricsContainer container = MetricsEnvironment.getCurrentContainer();
-      // if (container != null) {
-      //   LOG.info("xxx container {}", container.toString());
-      // }
-      // create in current container
       Gauge gauge =
           KafkaSinkMetrics.createBacklogGauge(
               MetricName.named(
-                  "KafkaSink",
-                  KafkaSinkMetrics.getMetricGaugeName(topic, partitionId)
-                      .getName())); // must be true
+                  "KafkaSink", KafkaSinkMetrics.getMetricGaugeName(topic, partitionId).getName()),
+              true); // must be true
       gauge.set(backlog);
     }
 

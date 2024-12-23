@@ -205,18 +205,6 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     return gauges.get(metricName);
   }
 
-  @Override
-  public GaugeCell getPerWorkerGauge(MetricName metricName) {
-    // LOG.info("Xxx get per Worker Gauge {}", metricName);
-    GaugeCell perWorkerGauge = gauges.get(metricName);
-    LOG.info("Xxx is per WOrker? {}", perWorkerGauge.perWorker());
-    perWorkerGauge.setPerWorker();
-    LOG.info("Xxx is per WOrker now? {}", perWorkerGauge.perWorker());
-    // annotate with correct per worker type
-    // TODO: how to move to factory function in MetricsMap?
-    return perWorkerGauge;
-  }
-
   /**
    * Return a {@code GaugeCell} named {@code metricName}. If it doesn't exist, return {@code null}.
    */
@@ -313,14 +301,8 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
       // Drop if the stepname is not set. All user counters must be
       // defined for a PTransform. They must be defined on a container bound to a step.
       if (this.stepName == null) {
-        // return null;
+        return null;
         // this.stepName="dummy_step_name";
-        builder
-            .setUrn(userUrn)
-            .setLabel(
-                MonitoringInfoConstants.Labels.NAMESPACE, metricKey.metricName().getNamespace())
-            .setLabel(MonitoringInfoConstants.Labels.NAME, metricKey.metricName().getName())
-            .setLabel(MonitoringInfoConstants.Labels.PTRANSFORM, "dummy_step_name");
       } else {
         builder
             .setUrn(userUrn)
@@ -335,6 +317,7 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     // based on namespace, add per worker metrics here
     if (metricName.getNamespace().equals("BigQuerySink")
         || metricName.getNamespace().equals("KafkaSink")) {
+      LOG.info("xxx does it get here?");
       builder.setLabel(MonitoringInfoConstants.Labels.PER_WORKER_METRIC, "true");
     }
     return builder;
@@ -515,6 +498,8 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
     gauges.forEach(
         (metricName, gaugeCell) -> {
           if (gaugeCell.getDirty().beforeCommit()) {
+            // add per worker labels here
+            LOG.info("Xxx gauge metric name {} {}", metricName, gaugeCell.toString());
             String shortId = getShortId(metricName, this::gaugeToMonitoringMetadata, shortIds);
             if (shortId != null) {
               builder.put(shortId, encodeInt64Gauge(gaugeCell.getCumulative()));
