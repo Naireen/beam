@@ -44,6 +44,7 @@ import java.util.function.Function;
 import org.apache.beam.model.pipeline.v1.MetricsApi.MonitoringInfo;
 import org.apache.beam.runners.core.metrics.MetricUpdates.MetricUpdate;
 import org.apache.beam.sdk.metrics.Distribution;
+import org.apache.beam.sdk.metrics.Gauge;
 import org.apache.beam.sdk.metrics.Metric;
 import org.apache.beam.sdk.metrics.MetricKey;
 import org.apache.beam.sdk.metrics.MetricName;
@@ -190,6 +191,15 @@ public class MetricsContainerImpl implements Serializable, MetricsContainer {
   @Override
   public GaugeCell getGauge(MetricName metricName) {
     return gauges.get(metricName);
+  }
+
+  @Override
+  public List<Gauge> getGauges() {
+    ArrayList<Gauge> gauges_list = new ArrayList<Gauge>(); // Create an ArrayList object
+    for (Map.Entry<MetricName, GaugeCell> gauge : gauges.entries()) {
+      gauges_list.add(gauge.getValue());
+    }
+    return gauges_list;
   }
 
   /**

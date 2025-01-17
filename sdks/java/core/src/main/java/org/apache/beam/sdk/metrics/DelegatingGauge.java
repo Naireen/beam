@@ -19,6 +19,8 @@ package org.apache.beam.sdk.metrics;
 
 import java.io.Serializable;
 import org.apache.beam.sdk.annotations.Internal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Implementation of {@link Gauge} that delegates to the instance for the current context. */
 @Internal
@@ -26,6 +28,8 @@ public class DelegatingGauge implements Metric, Gauge, Serializable {
   private final MetricName name;
   private final boolean processWideContainer;
   private final boolean perWorkerGauge;
+
+  private static final Logger LOG = LoggerFactory.getLogger(DelegatingGauge.class);
 
   /**
    * Create a {@code DelegatingGauge} with {@code perWorkerGauge} and {@code processWideContainer}
@@ -63,6 +67,10 @@ public class DelegatingGauge implements Metric, Gauge, Serializable {
   /** Set the gauge. */
   @Override
   public void set(long n) {
+    LOG.info(
+        "xxx set the gauge processWideContainer={} perWorkerGauge={}",
+        this.processWideContainer,
+        perWorkerGauge);
     MetricsContainer container =
         this.processWideContainer
             ? MetricsEnvironment.getProcessWideContainer()

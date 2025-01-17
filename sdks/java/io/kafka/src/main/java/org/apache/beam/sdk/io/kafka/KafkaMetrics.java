@@ -39,6 +39,8 @@ public interface KafkaMetrics {
 
   void updateKafkaMetrics();
 
+  void recordBacklogBytes(String topic, int partitionId, long backlog);
+
   /** No-op implementation of {@code KafkaResults}. */
   class NoOpKafkaMetrics implements KafkaMetrics {
     private NoOpKafkaMetrics() {}
@@ -51,6 +53,9 @@ public interface KafkaMetrics {
 
     @Override
     public void updateKafkaMetrics() {}
+
+    @Override
+    public void recordBacklogBytes(String topic, int partitionId, long backlog) {};
 
     private static NoOpKafkaMetrics singleton = new NoOpKafkaMetrics();
 
@@ -141,12 +146,39 @@ public interface KafkaMetrics {
       }
     }
 
-    private void recordBacklogBytes() {
+    // used in legacy implementation
+    private void recordBacklogBytesInternal() {
       for (Map.Entry<String, Long> backlogs : perTopicPartitionBacklogs().entrySet()) {
+        // make this on the processwide container?
         Gauge gauge =
             KafkaSinkMetrics.createBacklogGauge(MetricName.named("KafkaSink", backlogs.getKey()));
         gauge.set(backlogs.getValue());
       }
+    }
+
+    /**
+     * This is for recording backlog bytes on the current thread.
+     *
+     * @param topicName topicName
+     * @param partitionId partitionId for the topic Only included in the metric key if
+     *     'supportsMetricsDeletion' is enabled.
+     * @param backlogBytes backlog for the topic Only included in the metric key if
+     *     'supportsMetricsDeletion' is enabled.
+     */
+    @Override
+    public void recordBacklogBytes(String topicName, int partitionId, long backlogBytes) {
+      // this is using the existing metrics container
+      // Gauge perPartion =
+      //     Metrics.gauge(
+      //         "KafkaSink", KafkaSinkMetrics.getMetricGaugeName(topicName,
+      // partitionId).getName());
+      // perPartion.set(backlogBytes);
+
+      // attach to processWide container (changed createBacklogGauge impl)
+      Gauge perPartion =
+          KafkaSinkMetrics.createBacklogGauge(
+              KafkaSinkMetrics.getMetricGaugeName(topicName, partitionId));
+      perPartion.set(backlogBytes);
     }
 
     /**
@@ -160,7 +192,7 @@ public interface KafkaMetrics {
         LOG.warn("Updating stale Kafka metrics container");
         return;
       }
-      recordBacklogBytes();
+      recordBacklogBytesInternal();
       recordRpcLatencyMetrics();
     }
   }

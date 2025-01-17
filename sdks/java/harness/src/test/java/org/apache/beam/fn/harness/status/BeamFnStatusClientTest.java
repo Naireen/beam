@@ -44,6 +44,7 @@ import org.apache.beam.model.fnexecution.v1.BeamFnApi.WorkerStatusRequest;
 import org.apache.beam.model.fnexecution.v1.BeamFnApi.WorkerStatusResponse;
 import org.apache.beam.model.fnexecution.v1.BeamFnWorkerStatusGrpc.BeamFnWorkerStatusImplBase;
 import org.apache.beam.model.pipeline.v1.Endpoints;
+import org.apache.beam.runners.core.metrics.MetricsContainerImpl;
 import org.apache.beam.sdk.fn.channel.ManagedChannelFactory;
 import org.apache.beam.sdk.fn.test.TestStreams;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
@@ -89,6 +90,7 @@ public class BeamFnStatusClientTest {
             apiServiceDescriptor,
             channelFactory::forDescriptor,
             handler.getBundleProcessorCache(),
+            MetricsContainerImpl.createProcessWideContainer(),
             PipelineOptionsFactory.create(),
             Caches.noop());
     StringJoiner joiner = new StringJoiner("\n");
@@ -132,6 +134,7 @@ public class BeamFnStatusClientTest {
           apiServiceDescriptor,
           channelFactory::forDescriptor,
           processorCache,
+          MetricsContainerImpl.createProcessWideContainer(),
           PipelineOptionsFactory.create(),
           Caches.noop());
       StreamObserver<WorkerStatusRequest> requestObserver = requestObservers.take();
@@ -152,6 +155,7 @@ public class BeamFnStatusClientTest {
             apiServiceDescriptor,
             channelFactory::forDescriptor,
             mock(BundleProcessorCache.class),
+            MetricsContainerImpl.createProcessWideContainer(),
             PipelineOptionsFactory.create(),
             Caches.fromOptions(
                 PipelineOptionsFactory.fromArgs("--maxCacheMemoryUsageMb=234").create()));

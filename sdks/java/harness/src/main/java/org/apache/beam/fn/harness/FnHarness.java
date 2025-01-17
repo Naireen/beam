@@ -353,6 +353,7 @@ public class FnHarness {
                 statusApiServiceDescriptor,
                 channelFactory::forDescriptor,
                 processBundleHandler.getBundleProcessorCache(),
+                MetricsEnvironment.getProcessWideContainer(),
                 options,
                 processWideCache);
       }

@@ -97,7 +97,8 @@ public class KafkaSinkMetrics {
    * @return Counter.
    */
   public static Gauge createBacklogGauge(MetricName name) {
-    return new DelegatingGauge(name, false, true);
+    return new DelegatingGauge(
+        name, true, false); // make sure this doesn't break the legacy implementation **
   }
 
   /**

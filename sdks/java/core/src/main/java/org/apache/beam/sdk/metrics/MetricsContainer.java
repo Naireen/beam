@@ -18,6 +18,8 @@
 package org.apache.beam.sdk.metrics;
 
 import java.io.Serializable;
+import java.util.Collections;
+import java.util.List;
 import org.apache.beam.model.pipeline.v1.MetricsApi;
 import org.apache.beam.sdk.util.HistogramData;
 
@@ -52,6 +54,14 @@ public interface MetricsContainer extends Serializable {
    * this container.
    */
   Gauge getGauge(MetricName metricName);
+
+  /**
+   * Return the {@link Gauge} that should be used for implementing the given {@code metricName} in
+   * this container.
+   */
+  default List<Gauge> getGauges() {
+    return Collections.emptyList();
+  };
 
   /**
    * Return the {@link StringSet} that should be used for implementing the given {@code metricName}

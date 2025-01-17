@@ -17,6 +17,8 @@
  */
 package org.apache.beam.fn.harness.status;
 
+import static org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.base.Preconditions.checkNotNull;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -28,6 +30,7 @@ import java.util.StringJoiner;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.stream.StreamSupport;
 import org.apache.beam.fn.harness.Cache;
 import org.apache.beam.fn.harness.control.ExecutionStateSampler.ExecutionStateTrackerStatus;
 import org.apache.beam.fn.harness.control.ProcessBundleHandler.BundleProcessor;
@@ -37,6 +40,9 @@ import org.apache.beam.model.fnexecution.v1.BeamFnApi.WorkerStatusRequest;
 import org.apache.beam.model.fnexecution.v1.BeamFnApi.WorkerStatusResponse;
 import org.apache.beam.model.fnexecution.v1.BeamFnWorkerStatusGrpc;
 import org.apache.beam.model.pipeline.v1.Endpoints.ApiServiceDescriptor;
+import org.apache.beam.sdk.metrics.Gauge;
+import org.apache.beam.sdk.metrics.MetricsContainer;
+import org.apache.beam.sdk.metrics.MetricsEnvironment;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.vendor.grpc.v1p60p1.io.grpc.ManagedChannel;
 import org.apache.beam.vendor.grpc.v1p60p1.io.grpc.stub.StreamObserver;
@@ -54,12 +60,14 @@ public class BeamFnStatusClient implements AutoCloseable {
   private final CompletableFuture<Object> inboundObserverCompletion;
   private static final Logger LOG = LoggerFactory.getLogger(BeamFnStatusClient.class);
   private final MemoryMonitor memoryMonitor;
+  private final MetricsContainer processWideMetricsContainer;
   private final Cache<?, ?> cache;
 
   public BeamFnStatusClient(
       ApiServiceDescriptor apiServiceDescriptor,
       Function<ApiServiceDescriptor, ManagedChannel> channelFactory,
       BundleProcessorCache processBundleCache,
+      MetricsContainer processWideContainer,
       PipelineOptions options,
       Cache<?, ?> cache) {
     this.channel = channelFactory.apply(apiServiceDescriptor);
@@ -69,6 +77,7 @@ public class BeamFnStatusClient implements AutoCloseable {
     this.memoryMonitor = MemoryMonitor.fromOptions(options);
     this.cache = cache;
     this.inboundObserverCompletion = new CompletableFuture<>();
+    this.processWideMetricsContainer = processWideContainer;
     Thread thread = new Thread(memoryMonitor);
     thread.setDaemon(true);
     thread.setPriority(Thread.MIN_PRIORITY);
@@ -171,6 +180,29 @@ public class BeamFnStatusClient implements AutoCloseable {
     return cacheStats.toString();
   }
 
+  void getMetrics() {
+    // are they the same?
+    // Iterable<Gauge> gauge_metrics_global =
+    // MetricsEnvironment.getProcessWideContainer().getGauges();
+    MetricsContainer container = checkNotNull(MetricsEnvironment.getProcessWideContainer());
+    Iterable<Gauge> gauge_metrics_global = container.getGauges();
+
+    Iterable<Gauge> gauge_metrics = processWideMetricsContainer.getGauges();
+    long gauge_metrics_global_size =
+        StreamSupport.stream(gauge_metrics_global.spliterator(), false).count();
+    long gauge_metrics_size = StreamSupport.stream(gauge_metrics.spliterator(), false).count();
+
+    LOG.info(
+        "xxx gauge metrics size {} {} {}, hashcodes : {}, {}",
+        gauge_metrics_size,
+        gauge_metrics_global_size,
+        gauge_metrics == gauge_metrics_global,
+        processWideMetricsContainer.hashCode(),
+        container.hashCode());
+    for (Gauge gauge : gauge_metrics) {
+      LOG.info("xxx gauges {}", gauge.getName());
+    }
+  }
   /** Class representing the execution state of a bundle. */
   static class BundleState {
     final String instruction;
@@ -241,6 +273,7 @@ public class BeamFnStatusClient implements AutoCloseable {
   private class InboundObserver implements StreamObserver<BeamFnApi.WorkerStatusRequest> {
     @Override
     public void onNext(WorkerStatusRequest workerStatusRequest) {
+      LOG.info("xxx onNext");
       StringJoiner status = new StringJoiner("\n");
       status.add(getMemoryUsage());
       status.add("\n");
@@ -249,6 +282,8 @@ public class BeamFnStatusClient implements AutoCloseable {
       status.add(getActiveProcessBundleState());
       status.add("\n");
       status.add(getThreadDump());
+      LOG.info("xxx getMetrics");
+      getMetrics();
       outboundObserver.onNext(
           WorkerStatusResponse.newBuilder()
               .setId(workerStatusRequest.getId())
