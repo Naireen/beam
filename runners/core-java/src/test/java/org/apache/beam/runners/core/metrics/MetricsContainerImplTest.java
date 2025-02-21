@@ -242,15 +242,16 @@ public class MetricsContainerImplTest {
   }
 
   @Test
-  public void testMonitoringInfosLabelsArePopulatedForSinkCounter() {
+  public void testMonitoringInfosLabelsArePopulatedForMetricNamesWithLabels() {
     MetricsContainerImpl testObject = new MetricsContainerImpl("step1");
-    CounterCell c1 = testObject.getCounter(MetricName.named("KafkaSink", "name1"));
+
+    HashMap<String, String> labelMap = new HashMap<>();
+    labelMap.put("PER_WORKER_METRIC", "true");
+    CounterCell c1 = testObject.getCounter(MetricName.named("KafkaSink", "name1", labelMap));
     CounterCell c2 = testObject.getCounter(MetricName.named("BigQuerySink", "name2"));
-    CounterCell c3 = testObject.getCounter(MetricName.named("PS", "name3"));
 
     c1.inc(2L);
     c2.inc(4L);
-    c3.inc(5L);
 
     SimpleMonitoringInfoBuilder builder1 = new SimpleMonitoringInfoBuilder();
     builder1
@@ -266,17 +267,7 @@ public class MetricsContainerImplTest {
         .setUrn(MonitoringInfoConstants.Urns.USER_SUM_INT64)
         .setLabel(MonitoringInfoConstants.Labels.NAMESPACE, "BigQuerySink")
         .setLabel(MonitoringInfoConstants.Labels.NAME, "name2")
-        .setLabel(MonitoringInfoConstants.Labels.PER_WORKER_METRIC, "true")
         .setInt64SumValue(4)
-        .setLabel(MonitoringInfoConstants.Labels.PTRANSFORM, "step1");
-
-    // Not in an supported namespace, so extra metadata isn't added.
-    SimpleMonitoringInfoBuilder builder3 = new SimpleMonitoringInfoBuilder();
-    builder3
-        .setUrn(MonitoringInfoConstants.Urns.USER_SUM_INT64)
-        .setLabel(MonitoringInfoConstants.Labels.NAMESPACE, "PS")
-        .setLabel(MonitoringInfoConstants.Labels.NAME, "name3")
-        .setInt64SumValue(5)
         .setLabel(MonitoringInfoConstants.Labels.PTRANSFORM, "step1");
 
     ArrayList<MonitoringInfo> actualMonitoringInfos = new ArrayList<MonitoringInfo>();
@@ -284,9 +275,7 @@ public class MetricsContainerImplTest {
       actualMonitoringInfos.add(mi);
     }
 
-    assertThat(
-        actualMonitoringInfos,
-        containsInAnyOrder(builder1.build(), builder2.build(), builder3.build()));
+    assertThat(actualMonitoringInfos, containsInAnyOrder(builder1.build(), builder2.build()));
   }
 
   @Test

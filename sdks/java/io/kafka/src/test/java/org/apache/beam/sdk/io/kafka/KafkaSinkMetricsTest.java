@@ -20,6 +20,8 @@ package org.apache.beam.sdk.io.kafka;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
+import java.util.HashMap;
+import org.apache.beam.sdk.metrics.Gauge;
 import org.apache.beam.sdk.metrics.Histogram;
 import org.apache.beam.sdk.metrics.MetricName;
 import org.junit.Test;
@@ -32,12 +34,24 @@ import org.junit.runners.JUnit4;
 public class KafkaSinkMetricsTest {
   @Test
   public void testCreatingHistogram() throws Exception {
-
     Histogram histogram =
         KafkaSinkMetrics.createRPCLatencyHistogram(KafkaSinkMetrics.RpcMethod.POLL, "topic1");
 
     MetricName histogramName =
         MetricName.named("KafkaSink", "RpcLatency*rpc_method:POLL;topic_name:topic1;");
     assertThat(histogram.getName(), equalTo(histogramName));
+  }
+
+  @Test
+  public void testCreatingBacklogGauge() throws Exception {
+    Gauge gauge = KafkaSinkMetrics.createBacklogGauge("topic", /*partitionId*/ 0);
+
+    HashMap<String, String> labelMap = new HashMap<>();
+    labelMap.put("PER_WORKER_METRIC", "true");
+    MetricName gaugeName =
+        MetricName.named(
+            "KafkaSink", "EstimatedBacklogSize*partition_id:0;topic_name:topic;", labelMap);
+
+    assertThat(gauge.getName(), equalTo(gaugeName));
   }
 }

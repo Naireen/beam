@@ -18,6 +18,7 @@
 package org.apache.beam.sdk.metrics;
 
 import com.google.auto.value.AutoValue;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,6 +43,7 @@ public class LabeledMetricNameUtils {
    */
   public static class MetricNameBuilder {
     private final StringBuilder labeledNameBuilder;
+    private HashMap<String, String> metricLabels = new HashMap<String, String>();
 
     private MetricNameBuilder(String baseName) {
       this.labeledNameBuilder = new StringBuilder(baseName + METRIC_NAME_DELIMITER);
@@ -63,8 +65,12 @@ public class LabeledMetricNameUtils {
           .append(LABEL_DELIMITER);
     }
 
+    public void addMetricLabel(String key, String value) {
+      this.metricLabels.put(key, value);
+    }
+
     public MetricName build(String metricNamespace) {
-      return MetricName.named(metricNamespace, labeledNameBuilder.toString());
+      return MetricName.named(metricNamespace, labeledNameBuilder.toString(), this.metricLabels);
     }
   }
 

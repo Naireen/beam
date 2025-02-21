@@ -22,6 +22,7 @@ import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
 import com.google.rpc.Code;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.Optional;
@@ -1067,6 +1068,11 @@ final class RpcQosImpl implements RpcQos {
     @Override
     public String getName() {
       return name;
+    }
+
+    @Override
+    public HashMap<String, String> getLabels() {
+      return new HashMap<>();
     }
   }
 }
