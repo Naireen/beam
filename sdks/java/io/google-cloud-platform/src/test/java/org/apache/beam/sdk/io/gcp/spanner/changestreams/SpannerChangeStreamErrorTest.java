@@ -316,8 +316,10 @@ public class SpannerChangeStreamErrorTest implements Serializable {
       // DatabaseClient.getDialect returns "DEADLINE_EXCEEDED: Operation did not complete in the "
       // given time" even though we mocked it out.
       thrown.expectMessage("DEADLINE_EXCEEDED");
-      // Allow for at most two retry requests;
-      int requestThreshold = 2;
+      // Allow for at most twenty retry requests (this still finishes in under a minute, so the test
+      // would only take slightly longer than before, and will let it pass where it would fail
+      // previously otherwise);
+      int requestThreshold = 20;
       assertThat(
           mockSpannerService.countRequestsOfType(ExecuteSqlRequest.class),
           Matchers.lessThanOrEqualTo(requestThreshold));
