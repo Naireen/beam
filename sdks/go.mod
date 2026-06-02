@@ -47,7 +47,7 @@ require (
 	github.com/lib/pq v1.11.1
 	github.com/linkedin/goavro/v2 v2.15.0
 	github.com/nats-io/nats-server/v2 v2.12.4
-	github.com/nats-io/nats.go v1.48.0
+	github.com/nats-io/nats.go v1.52.0
 	github.com/proullon/ramsql v0.1.4
 	github.com/spf13/cobra v1.10.2
 	github.com/testcontainers/testcontainers-go v0.40.0
@@ -55,11 +55,11 @@ require (
 	github.com/xitongsys/parquet-go v1.6.2
 	github.com/xitongsys/parquet-go-source v0.0.0-20241021075129-b732d2ac9c9b
 	go.mongodb.org/mongo-driver v1.17.9
-	golang.org/x/net v0.50.0
+	golang.org/x/net v0.51.0
 	golang.org/x/oauth2 v0.35.0
-	golang.org/x/sync v0.19.0
-	golang.org/x/sys v0.41.0
-	golang.org/x/text v0.34.0
+	golang.org/x/sync v0.20.0
+	golang.org/x/sys v0.42.0
+	golang.org/x/text v0.35.0
 	google.golang.org/api v0.257.0
 	google.golang.org/genproto v0.0.0-20250922171735-9219d122eba9
 	google.golang.org/grpc v1.79.3
@@ -110,7 +110,7 @@ require (
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/nats-io/jwt/v2 v2.8.0 // indirect
-	github.com/nats-io/nkeys v0.4.12 // indirect
+	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -133,7 +133,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.40.0 // indirect
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	go.shabbyrobe.org/gocovmerge v0.0.0-20230507111327-fa4f82cfbf4d // indirect
-	golang.org/x/telemetry v0.0.0-20260109210033-bd525da824e2 // indirect
+	golang.org/x/telemetry v0.0.0-20260209163413-e7419c687ee4 // indirect
 	golang.org/x/time v0.14.0 // indirect
 )
 
@@ -180,7 +180,7 @@ require (
 	github.com/gorilla/handlers v1.5.2 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/klauspost/compress v1.18.3 // indirect
+	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
@@ -202,9 +202,9 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/mod v0.32.0 // indirect
-	golang.org/x/tools v0.41.0 // indirect
+	golang.org/x/crypto v0.49.0 // indirect
+	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/tools v0.42.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
